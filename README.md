@@ -15,7 +15,7 @@ A unofficial portable, self-contained AppImage of [qutebrowser](https://github.c
 ## Usage
 
 1. **Download the Unofficial Qutebrowser AppImage**:
-   - Grab the latest release from the [Releases page](https://github.com/yourusername/qutebrowser-appimage/releases).
+   - Grab the latest release from the [Releases page](https://github.com/danrobi11/qutebrowser-appimage/releases).
    - Direct link: `qutebrowser-3.2.0-x86_64.AppImage`.
 
 2. **Make it Executable**:
