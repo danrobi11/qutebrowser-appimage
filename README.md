@@ -21,6 +21,12 @@ A unofficial portable, self-contained AppImage of [qutebrowser](https://github.c
    ```bash
    chmod +x qutebrowser-3.2.0-x86_64.AppImage
 
+## Acknowledgments
+
+- [qutebrowser](https://github.com/qutebrowser/qutebrowser) - For the fantastic keyboard-driven browser that inspired this project.
+- [linuxdeployqt](https://github.com/probonopd/linuxdeployqt) & [AppImageKit](https://github.com/AppImage/AppImageKit) - For the powerful tools that made packaging this AppImage possible.
+- Community - A huge thanks to everyone who offered troubleshooting insights and support along the way!
+
 ## Dependencies for Building Qutebrowser AppImage
 
 To build the `qutebrowser-3.2.0-x86_64.AppImage`, you’ll need the following dependencies installed on a Debian-based system (e.g., Ubuntu). These include system packages for Qt, OpenGL, and other runtime requirements, as well as Python packages for qutebrowser itself.
