@@ -1,0 +1,2 @@
+# qutebrowser-appimage
+Qutebrowser AppImage
