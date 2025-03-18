@@ -25,7 +25,6 @@ A unofficial portable, self-contained AppImage of [qutebrowser](https://github.c
 
 - [qutebrowser](https://github.com/qutebrowser/qutebrowser) - For the fantastic keyboard-driven browser that inspired this project.
 - [linuxdeployqt](https://github.com/probonopd/linuxdeployqt) & [AppImageKit](https://github.com/AppImage/AppImageKit) - For the powerful tools that made packaging this AppImage possible.
-- Community - A huge thanks to everyone who offered troubleshooting insights and support along the way!
 
 ## Dependencies for Building Qutebrowser AppImage
 
