@@ -1,5 +1,6 @@
 # Unofficial Qutebrowser AppImage
 
+![qutebrowser.svg](https://www.qutebrowser.org/icons/qutebrowser.svg)
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/yourusername/qutebrowser-appimage/actions)  
 A unofficial portable, self-contained AppImage of [qutebrowser](https://github.com/qutebrowser/qutebrowser), a keyboard-oriented, Vim-like web browser built with QtWebEngine. This project packages qutebrowser v3.2.0 into an AppImage for easy distribution and use on Linux systems, complete with OpenGL rendering and HTTPS support.
