@@ -1,4 +1,4 @@
-name: qutebrowser-portable-binary-main
+name: qutebrowser-portable-binary-main.yml
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Install build dependencies
@@ -21,8 +21,6 @@ jobs:
           sudo apt install -y \
             python3-pyqt5.qtwebengine \
             python3-pyqt5.qtwebchannel \
-            python3-pyqt5.qtwidgets \
-            python3-pyqt5.qtquick \
             python3-pyqt5.qtsvg \
             python3-pyqt5.qtopengl \
             python3-pyqt5 \
@@ -49,7 +47,7 @@ jobs:
         run: |
           pip install --prefix=$HOME/.local qutebrowser
 
-      - name: Bundle Qutebrowser and dependencies
+      - name: Bundle Qutebrowser binary and dependencies
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications}
 
@@ -64,18 +62,13 @@ jobs:
           done
 
           # Copy linker
-          cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/usr/lib/
+          cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/usr/lib/ || true
+          cp -v /lib64/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/usr/lib/ || true
 
-          # Copy Python site-packages (Qutebrowser + deps)
-          SITE_PACKAGES=$(python3 -c 'import site; print(site.getusersitepackages())')
-          mkdir -p "$HOME/qutebrowser-bundle/usr/lib/site-packages"
-          cp -r "$SITE_PACKAGES/"* "$HOME/qutebrowser-bundle/usr/lib/site-packages"
+          # Copy site-packages (Qutebrowser + deps)
+          cp -r $HOME/.local/lib/python3*/site-packages $HOME/qutebrowser-bundle/usr/lib/
 
-      - name: Patch Python binary RPATH
+      - name: Verify contents
         run: |
-          patchelf --force-rpath --set-rpath "\$ORIGIN/../lib" $HOME/qutebrowser-bundle/usr/bin/python3
-          readelf -d $HOME/qutebrowser-bundle/usr/bin/python3 | grep RPATH
-
-      - name: Show contents of bundle dir
-        run: |
-          tree $HOME/qutebrowser-bundle || find $HOME/qutebrowser-bundle
+          echo "Contents of bundle:"
+          find $HOME/qutebrowser-bundle
