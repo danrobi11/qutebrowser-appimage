@@ -71,7 +71,7 @@ jobs:
           cp -r "$stdlib_dir" $HOME/qutebrowser-bundle/usr/lib/
 
           # Create qutebrowser launcher
-          cat > $HOME/qutebrowser-bundle/usr/bin/qutebrowser <<'EOF'
+          cat <<'EOF' > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 #!/bin/sh
 DIR=$(dirname "$0")
 export PYTHONHOME="$DIR/.."
@@ -93,5 +93,5 @@ EOF
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-portable
-          path: $HOME/qutebrowser-portable.tar.gz
+          path: "$HOME/qutebrowser-portable.tar.gz"
           if-no-files-found: error
