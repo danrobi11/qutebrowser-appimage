@@ -93,5 +93,5 @@ EOF
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-portable
-          path: ~/qutebrowser-portable.tar.gz
+          path: $HOME/qutebrowser-portable.tar.gz
           if-no-files-found: error
