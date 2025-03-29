@@ -76,4 +76,9 @@ jobs:
         run: |
           cd $HOME
           tar -czvf qutebrowser-portable.tar.gz qutebrowser-bundle
-          echo "Archive created at $HOME/qutebrowser-portable.tar.gz"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qutebrowser-portable
+          path: $HOME/qutebrowser-portable.tar.gz
