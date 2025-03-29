@@ -1,82 +1,63 @@
-name: Build Qutebrowser Portable Binary
+name: Build Qutebrowser Portable
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            build-essential qtbase5-dev qtwebengine5-dev \
-            python3 python3-pyqt5 python3-pyqt5.qtwebengine \
-            python3-pyqt5.qtsvg python3-pyqt5.qtwebchannel \
-            python3-pip git curl wget zip patchelf \
-            libx11-dev libgl1 libglib2.0-dev
+          sudo apt-get install -y python3 python3-pip python3-setuptools python3-pyqt5 python3-pyqt5.qtwebengine qtbase5-dev qtwebengine5-dev libqt5svg5-dev
 
-      - name: Install Python dependencies
+      - name: Install Qutebrowser with pip
         run: |
-          python3 -m pip install --upgrade pip
-          python3 -m pip install \
-            jinja2 pygments qtpy qtawesome \
-            qutebrowser
+          pip install --prefix=$HOME/.local qutebrowser
 
-      - name: Create qutebrowser launcher
+      - name: Create portable bundle structure
         run: |
-          mkdir -p ~/qutebrowser-bundle/usr/bin
-          cp "$(which qutebrowser)" ~/qutebrowser-bundle/usr/bin/qutebrowser-bin
-          chmod +w ~/qutebrowser-bundle/usr/bin/qutebrowser-bin
+          mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications}
 
-      - name: Bundle required libraries
-        run: |
-          cd ~/qutebrowser-bundle
-          mkdir -p usr/lib
-          ldd usr/bin/qutebrowser-bin | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
+          # Copy Python binary
+          cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
+          chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
+
+          # Copy shared libs used by Python
+          ldd "$(which python3)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
             echo "Copying $lib"
-            cp -v "$lib" usr/lib/ || { echo "Error copying $lib"; exit 1; }
+            cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
           done
-          cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 usr/lib/ || { echo "Missing linker"; exit 1; }
 
-      - name: Patch RPATH for portability
-        run: |
-          patchelf --force-rpath --set-rpath \$ORIGIN/../lib ~/qutebrowser-bundle/usr/bin/qutebrowser-bin
-          readelf -d ~/qutebrowser-bundle/usr/bin/qutebrowser-bin | grep RPATH
+          # Copy linker
+          cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/usr/lib/
 
-      - name: Create launcher wrapper
+          # Copy site-packages (Qutebrowser + deps)
+          cp -r $HOME/.local/lib/python3*/site-packages $HOME/qutebrowser-bundle/usr/lib/
+
+      - name: Create AppRun launcher
         run: |
-          cat > ~/qutebrowser-bundle/usr/bin/qutebrowser << EOF
+          cat > $HOME/qutebrowser-bundle/AppRun << 'EOF'
           #!/bin/bash
-          DIR="\$(dirname "\$(realpath "\$0")")"
-          "\$DIR/../lib/ld-linux-x86-64.so.2" --library-path "\$DIR/../lib" "\$DIR/qutebrowser-bin" "\$@"
+          HERE="$(dirname "$(readlink -f "$0")")"
+          export PYTHONPATH="$HERE/usr/lib/site-packages"
+          exec "$HERE/usr/bin/python3" -m qutebrowser "$@"
           EOF
-          chmod +x ~/qutebrowser-bundle/usr/bin/qutebrowser
-          cat ~/qutebrowser-bundle/usr/bin/qutebrowser
 
-      - name: Package bundle
+          chmod +x $HOME/qutebrowser-bundle/AppRun
+
+      - name: List bundle contents
         run: |
-          cd ~/qutebrowser-bundle
-          zip -r ~/qutebrowser-portable.zip .
+          echo "Bundle created at: $HOME/qutebrowser-bundle"
+          find $HOME/qutebrowser-bundle
 
-      - name: Generate SHA256 checksum
-        run: |
-          sha256sum ~/qutebrowser-portable.zip > ~/qutebrowser-portable.zip.sha256
-          cat ~/qutebrowser-portable.zip.sha256
-
-      - name: Upload artifact
+      - name: Upload bundle as artifact
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-portable
-          path: |
-            ~/qutebrowser-portable.zip
-            ~/qutebrowser-portable.zip.sha256
+          path: ~/qutebrowser-bundle
