@@ -65,6 +65,11 @@ jobs:
           # Copy libpython shared object
           find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
+          # Copy Python stdlib (needed for encodings, etc.)
+          stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
+          echo "Copying stdlib from $stdlib_dir"
+          cp -r "$stdlib_dir" $HOME/qutebrowser-bundle/usr/lib/python3.10/
+
           # Create qutebrowser launcher
           cat > $HOME/qutebrowser-bundle/usr/bin/qutebrowser <<'EOF'
           #!/bin/sh
