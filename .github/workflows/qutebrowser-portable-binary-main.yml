@@ -42,7 +42,7 @@ jobs:
             python3-pip \
             patchelf
 
-      - name: Install Qutebrowser via pip
+      - name: Install Qutebrowser via pip into --target directly
         run: |
           export TARGET=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
           mkdir -p "$TARGET"
@@ -66,22 +66,6 @@ jobs:
           cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/usr/lib/ || true
           cp -v /lib64/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/usr/lib/ || true
 
-          # Copy site-packages (Qutebrowser + deps)
-          site_dir=$(python3 -c "import site; print(site.getusersitepackages())")
-          echo "Resolved site-packages: $site_dir"
-          if [ -d "$site_dir" ]; then
-            cp -r "$site_dir" $HOME/qutebrowser-bundle/usr/lib/
-          else
-            fallback=$(find $HOME/.local/lib -type d -name site-packages | head -n 1 || true)
-            if [ -n "$fallback" ] && [ -d "$fallback" ]; then
-              echo "Using fallback site-packages: $fallback"
-              cp -r "$fallback" $HOME/qutebrowser-bundle/usr/lib/
-            else
-              echo "Site-packages directory not found at resolved or fallback path." >&2
-              exit 1
-            fi
-          fi
-
       - name: List contents
         run: |
           find $HOME/qutebrowser-bundle
@@ -96,3 +80,4 @@ jobs:
         with:
           name: qutebrowser-portable
           path: ~/qutebrowser-portable.tar.gz
+          if-no-files-found: error
