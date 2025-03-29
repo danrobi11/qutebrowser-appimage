@@ -72,11 +72,12 @@ jobs:
 
           # Create qutebrowser launcher
           cat > $HOME/qutebrowser-bundle/usr/bin/qutebrowser <<'EOF'
-          #!/bin/sh
-          DIR=$(dirname "$0")
-          export PYTHONHOME="$DIR/.."
-          exec "$DIR/python3" -s -m qutebrowser "$@"
-          EOF
+#!/bin/sh
+DIR=$(dirname "$0")
+export PYTHONHOME="$DIR/.."
+export PYTHONPATH="$PYTHONHOME/lib/python3.10/site-packages"
+exec "$DIR/python3" -s -m qutebrowser "$@"
+EOF
           chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 
       - name: List contents
