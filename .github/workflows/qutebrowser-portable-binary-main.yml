@@ -71,7 +71,7 @@ jobs:
           cp -r "$stdlib_dir" $HOME/qutebrowser-bundle/usr/lib/
 
           # Create qutebrowser launcher
-          cat > $HOME/qutebrowser-bundle/usr/bin/qutebrowser <<'EOF'
+          cat > $HOME/qutebrowser-bundle/usr/bin/qutebrowser << 'EOF'
 #!/bin/sh
 DIR=$(dirname "$0")
 export PYTHONHOME="$DIR/../lib"
