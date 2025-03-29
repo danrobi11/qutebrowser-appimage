@@ -66,10 +66,15 @@ jobs:
 
           # Copy site-packages (Qutebrowser + deps)
           site_dir=$(python3 -c "import site; print(site.getusersitepackages())")
+          echo "Resolved site-packages: $site_dir"
           if [ -d "$site_dir" ]; then
             cp -r "$site_dir" $HOME/qutebrowser-bundle/usr/lib/
+          elif [ -d "$HOME/.local/lib/python3*/site-packages" ]; then
+            fallback=$(find $HOME/.local/lib -type d -name site-packages | head -n 1)
+            echo "Using fallback site-packages: $fallback"
+            cp -r "$fallback" $HOME/qutebrowser-bundle/usr/lib/
           else
-            echo "Site-packages directory not found: $site_dir" >&2
+            echo "Site-packages directory not found at resolved or fallback path." >&2
             exit 1
           fi
 
