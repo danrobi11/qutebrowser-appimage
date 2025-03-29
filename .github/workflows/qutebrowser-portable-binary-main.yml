@@ -1,4 +1,4 @@
-name: Qutebrowser Portable Binary
+name: qutebrowser-portable-binary-main
 
 on:
   push:
@@ -6,33 +6,50 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:
-    inputs:
-      trigger:
-        description: 'Manual trigger for Qutebrowser portable binary build'
-        required: false
-        default: 'start'
 
 jobs:
   build:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install build dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            python3 python3-pip python3-setuptools \
-            python3-pyqt5 python3-pyqt5.qtwebengine \
-            qtbase5-dev qtwebengine5-dev libqt5svg5-dev
+          sudo apt update
+          sudo apt install -y \
+            python3-pyqt5.qtwebengine \
+            python3-pyqt5.qtwebchannel \
+            python3-pyqt5.qtwidgets \
+            python3-pyqt5.qtquick \
+            python3-pyqt5.qtsvg \
+            python3-pyqt5.qtopengl \
+            python3-pyqt5 \
+            qtwebengine5-dev \
+            qt5-qmltooling-plugins \
+            qtdeclarative5-dev \
+            qtpositioning5-dev \
+            qtdeclarative5-dev-tools \
+            libqt5svg5-dev \
+            libqt5webenginewidgets5 \
+            libqt5webenginecore5 \
+            libqt5webchannel5-dev \
+            libqt5quickwidgets5 \
+            libqt5opengl5-dev \
+            libqt5designer5 \
+            libqt5positioningquick5 \
+            libqt5quicktest5 \
+            libqt5quickparticles5 \
+            libqt5svg5 \
+            python3-pip \
+            patchelf
 
-      - name: Install Qutebrowser with pip
+      - name: Install Qutebrowser via pip
         run: |
           pip install --prefix=$HOME/.local qutebrowser
 
-      - name: Create portable bundle structure
+      - name: Bundle Qutebrowser and dependencies
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications}
 
@@ -49,27 +66,16 @@ jobs:
           # Copy linker
           cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/usr/lib/
 
-          # Copy site-packages (Qutebrowser + deps)
-          cp -r $HOME/.local/lib/python3*/site-packages $HOME/qutebrowser-bundle/usr/lib/
+          # Copy Python site-packages (Qutebrowser + deps)
+          SITE_PACKAGES=$(python3 -c 'import site; print(site.getusersitepackages())')
+          mkdir -p "$HOME/qutebrowser-bundle/usr/lib/site-packages"
+          cp -r "$SITE_PACKAGES/"* "$HOME/qutebrowser-bundle/usr/lib/site-packages"
 
-      - name: Create AppRun launcher
+      - name: Patch Python binary RPATH
         run: |
-          cat > $HOME/qutebrowser-bundle/AppRun << 'EOF'
-          #!/bin/bash
-          HERE="$(dirname "$(readlink -f "$0")")"
-          export PYTHONPATH="$HERE/usr/lib/site-packages"
-          exec "$HERE/usr/bin/python3" -m qutebrowser "$@"
-          EOF
+          patchelf --force-rpath --set-rpath "\$ORIGIN/../lib" $HOME/qutebrowser-bundle/usr/bin/python3
+          readelf -d $HOME/qutebrowser-bundle/usr/bin/python3 | grep RPATH
 
-          chmod +x $HOME/qutebrowser-bundle/AppRun
-
-      - name: List bundle contents
+      - name: Show contents of bundle dir
         run: |
-          echo "Bundle created at: $HOME/qutebrowser-bundle"
-          find $HOME/qutebrowser-bundle
-
-      - name: Upload bundle as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: qutebrowser-portable
-          path: ~/qutebrowser-bundle
+          tree $HOME/qutebrowser-bundle || find $HOME/qutebrowser-bundle
