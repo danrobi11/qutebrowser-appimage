@@ -71,14 +71,13 @@ jobs:
           cp -r "$stdlib_dir" $HOME/qutebrowser-bundle/usr/lib/
 
           # Create qutebrowser launcher
-          cat > $HOME/qutebrowser-bundle/usr/bin/qutebrowser << 'EOF'
-#!/bin/sh
+cat << 'EOF' > "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
 DIR=$(dirname "$0")
 export PYTHONHOME="$DIR/../lib"
 export PYTHONPATH="$PYTHONHOME/python3.10/site-packages"
 exec "$DIR/python3" -s -m qutebrowser "$@"
 EOF
-          chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          chmod +x "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
 
       - name: List contents
         run: |
