@@ -72,6 +72,7 @@ jobs:
 
           # Create qutebrowser launcher
 cat << 'EOF' > "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
+#!/bin/sh
 DIR=$(dirname "$0")
 export PYTHONHOME="$DIR/../lib"
 export PYTHONPATH="$PYTHONHOME/python3.10/site-packages"
