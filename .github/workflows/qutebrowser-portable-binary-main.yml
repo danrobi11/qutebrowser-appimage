@@ -61,14 +61,12 @@ jobs:
             cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
           done
 
-          # Copy linker
+          # Copy linker (ignore error if already copied)
           cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/usr/lib/ || true
           cp -v /lib64/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/usr/lib/ || true
 
           # Copy site-packages (Qutebrowser + deps)
-          cp -r $HOME/.local/lib/python3*/site-packages $HOME/qutebrowser-bundle/usr/lib/
+          find $HOME/.local/lib -type d -name "site-packages" -exec cp -r {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-      - name: Verify contents
-        run: |
-          echo "Contents of bundle:"
-          find $HOME/qutebrowser-bundle
+      - name: List bundle contents
+        run: find $HOME/qutebrowser-bundle
