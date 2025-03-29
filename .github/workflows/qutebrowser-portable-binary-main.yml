@@ -1,6 +1,10 @@
 name: Qutebrowser Portable Binary
 
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
     inputs:
       trigger:
