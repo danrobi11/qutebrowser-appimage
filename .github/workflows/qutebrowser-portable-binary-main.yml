@@ -56,8 +56,9 @@ jobs:
           find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
           # glibc bundle
+          cp /usr/lib/x86_64-linux-gnu/ld-2.35.so $HOME/qutebrowser-bundle/glibc/
+          ln -s ld-2.35.so $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
           for lib in \
-            /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 \
             /lib/x86_64-linux-gnu/libc.so.6 \
             /lib/x86_64-linux-gnu/libm.so.6 \
             /lib/x86_64-linux-gnu/libpthread.so.0 \
