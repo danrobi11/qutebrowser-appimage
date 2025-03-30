@@ -71,14 +71,14 @@ jobs:
           echo "Copying stdlib from $stdlib_dir"
           cp -r "$stdlib_dir" $HOME/qutebrowser-bundle/usr/lib/
 
-          # Create launcher script
-          cat << 'EOF' > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-#!/bin/sh
-DIR=$(dirname "$0")
-export PYTHONHOME="$DIR/../lib"
-export PYTHONPATH="$PYTHONHOME/python3.10/site-packages"
-exec "$DIR/python3" -s -m qutebrowser "$@"
-EOF
+          # Create launcher script using printf for safety
+          printf '%s\n' '#!/bin/sh' \
+            'DIR=$(dirname "$0")' \
+            'export PYTHONHOME="$DIR/../lib"' \
+            'export PYTHONPATH="$PYTHONHOME/python3.10/site-packages"' \
+            'exec "$DIR/python3" -s -m qutebrowser "$@"' \
+            > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+
           chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 
       - name: List contents
