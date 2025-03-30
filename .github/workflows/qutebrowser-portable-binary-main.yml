@@ -87,7 +87,7 @@ jobs:
               cp -v "$lib" $HOME/qutebrowser-bundle/glibc/
           done
 
-      - name: Write and compile debug-enabled C launcher
+      - name: Write and compile fixed C launcher with debug output
         run: |-
           cat > $HOME/qutebrowser-bundle/usr/bin/launcher.c <<'EOF'
           #define _GNU_SOURCE
@@ -107,7 +107,11 @@ jobs:
               }
               exe_path[len] = '\0';
 
-              char *dir = dirname(exe_path);
+              // Copy before using dirname (which mutates the string)
+              char exe_path_copy[PATH_MAX];
+              strncpy(exe_path_copy, exe_path, sizeof(exe_path_copy));
+              exe_path_copy[sizeof(exe_path_copy)-1] = '\0';
+              char *dir = dirname(exe_path_copy);
 
               char python_path[PATH_MAX];
               snprintf(python_path, sizeof(python_path), "%s/python3", dir);
