@@ -37,17 +37,18 @@ jobs:
 
       - name: Copy installed site-packages to bundle
         run: |
-          echo "🔍 Detecting user site-packages location..."
-          SITEPKG=$(python3.10 -c "import site; print(site.getusersitepackages())")
-          echo "✅ Found: $SITEPKG"
+          echo "Detecting user site-packages location..."
+          SITEPKG="$(python3.10 -c 'import site; print(site.getusersitepackages())')"
+          echo "Found: $SITEPKG"
 
           mkdir -p "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages"
           cp -rv "$SITEPKG"/* "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages"
 
-      - name: 🔍 Diagnostic: bundled site-packages size
+      - name: Check bundled site-packages
         run: |
-          du -sh $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
-          find $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages | wc -l
+          echo "Checking site-packages directory:"
+          du -sh "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages" || true
+          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages" | wc -l || true
 
       - name: Bundle Python binary and libs
         run: |
@@ -73,13 +74,13 @@ jobs:
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 $HOME/qutebrowser-bundle/usr/lib/
 
           stdlib_dir=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
-          echo "📚 Copying Python stdlib from: $stdlib_dir"
+          echo "Copying Python stdlib from: $stdlib_dir"
           cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
-      - name: 🔍 Diagnostic: Python stdlib
+      - name: Check Python stdlib
         run: |
-          du -sh $HOME/qutebrowser-bundle/usr/lib/python3.10
-          find $HOME/qutebrowser-bundle/usr/lib/python3.10 | wc -l
+          du -sh $HOME/qutebrowser-bundle/usr/lib/python3.10 || true
+          find $HOME/qutebrowser-bundle/usr/lib/python3.10 | wc -l || true
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -97,10 +98,10 @@ jobs:
           mv $HOME/qutebrowser-bundle/glibc/ld-linker $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
           chmod +x $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
 
-      - name: 🔍 Diagnostic: glibc files
+      - name: Check glibc files
         run: |
-          du -sh $HOME/qutebrowser-bundle/glibc
-          find $HOME/qutebrowser-bundle/glibc | wc -l
+          du -sh $HOME/qutebrowser-bundle/glibc || true
+          find $HOME/qutebrowser-bundle/glibc | wc -l || true
 
       - name: Write and compile C launcher
         run: |
@@ -170,8 +171,8 @@ jobs:
 
       - name: Final bundle check
         run: |
-          du -sh $HOME/qutebrowser-bundle/*
-          find $HOME/qutebrowser-bundle | wc -l
+          du -sh $HOME/qutebrowser-bundle/* || true
+          find $HOME/qutebrowser-bundle | wc -l || true
 
       - name: Create .tar.gz archive
         run: |
