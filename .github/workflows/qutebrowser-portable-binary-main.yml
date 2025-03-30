@@ -56,8 +56,17 @@ jobs:
           find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
           # glibc bundle
+          # Copy dynamic linker
+          if [ -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
+            cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/
+          elif [ -f /usr/lib/ld-linux-x86-64.so.2 ]; then
+            cp -v /usr/lib/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/
+          else
+            echo "Dynamic linker ld-linux-x86-64.so.2 not found!"
+            exit 1
+          fi
+
           for lib in \
-            /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 \
             /lib/x86_64-linux-gnu/libc.so.6 \
             /lib/x86_64-linux-gnu/libm.so.6 \
             /lib/x86_64-linux-gnu/libpthread.so.0 \
