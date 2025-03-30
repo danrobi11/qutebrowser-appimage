@@ -24,7 +24,8 @@ jobs:
             libffi8 \
             python3-pyqt5.qtwebengine \
             build-essential \
-            patchelf
+            patchelf \
+            gcc
 
       - name: Install Qutebrowser and PyQt5 into --target
         run: |
@@ -57,22 +58,20 @@ jobs:
           done
 
           find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
-
-          stdlib_dir=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
-          cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
-
           find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
           cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* $HOME/qutebrowser-bundle/usr/lib/
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 $HOME/qutebrowser-bundle/usr/lib/
 
-      - name: Extract dynamic linker and glibc from Ubuntu 22.04
+          stdlib_dir=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
+          cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
+
+      - name: Extract dynamic linker and full glibc from Ubuntu 22.04
         run: |
           docker run --rm -v $HOME:/mnt ubuntu:22.04 bash -c "
             apt update && apt install -y libc6
             mkdir -p /mnt/qutebrowser-bundle/glibc
 
-            # Copy dynamic linker
             cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /mnt/qutebrowser-bundle/glibc/
 
             # Copy all libraries the linker depends on
@@ -82,7 +81,7 @@ jobs:
             done
           "
 
-          # Workaround: Docker files may be root-owned or immutable
+          # Fix permissions if needed
           cp -v $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/ld-linker
           mv $HOME/qutebrowser-bundle/glibc/ld-linker $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
           chmod +x $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
