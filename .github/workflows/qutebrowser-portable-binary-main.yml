@@ -15,45 +15,46 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt update
           sudo apt install -y \
-            python3-pip \
             python3.10 \
+            python3-pip \
+            python3-setuptools \
             libffi8 \
-            python3-pyqt5.qtwebengine \
+            libqt5webenginecore5 \
+            libqt5webenginewidgets5 \
+            libqt5widgets5 \
             build-essential \
             patchelf \
             gcc
 
-      - name: Install Qutebrowser and PyQt5 into --target
+      - name: Install Qutebrowser and PyQt5 via pip (user local)
         run: |
+          python3.10 -m pip install --upgrade --no-cache-dir --user qutebrowser pyqt5 pyqtwebengine
+          python3.10 -m pip show qutebrowser || exit 1
+
+      - name: Copy installed site-packages to bundle
+        run: |
+          site_packages=$(python3.10 -c "import site; print(site.getusersitepackages())")
+          echo "✅ site-packages from: $site_packages"
+
           mkdir -p $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
-          PYTHONPATH=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages \
-            python3.10 -m pip install --upgrade --no-deps \
-            --target=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages \
-            qutebrowser pyqt5 pyqtwebengine
+          cp -rv "$site_packages"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
 
-      - name: 🔍 Check pip installed files
+      - name: 🔍 Diagnostic: bundled site-packages size
         run: |
-          echo "✅ site-packages contents:"
-          du -sh $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages || true
-          find $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages | wc -l || true
-          find $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages | head -n 20
+          du -sh $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
+          find $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages | wc -l
 
-      - name: Bundle Qutebrowser binary and dependencies
+      - name: Bundle Python binary and libs
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
           mkdir -p $HOME/qutebrowser-bundle/glibc
 
           cp "$(which python3.10)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
-
-      - name: "🧪 Diagnostic: ldd output for bundled python3"
-        run: |
-          echo "🧪 ldd output for bundled python3:"
-          ldd $HOME/qutebrowser-bundle/usr/bin/python3 || true
 
       - name: Patch interpreter and bundle shared libraries
         run: |
@@ -74,11 +75,10 @@ jobs:
           echo "📚 Copying Python stdlib from: $stdlib_dir"
           cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
-      - name: 🔍 Check Python stdlib
+      - name: 🔍 Diagnostic: Python stdlib
         run: |
-          du -sh $HOME/qutebrowser-bundle/usr/lib/python3.10 || true
-          find $HOME/qutebrowser-bundle/usr/lib/python3.10 | wc -l || true
-          find $HOME/qutebrowser-bundle/usr/lib/python3.10 | head -n 20
+          du -sh $HOME/qutebrowser-bundle/usr/lib/python3.10
+          find $HOME/qutebrowser-bundle/usr/lib/python3.10 | wc -l
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -96,16 +96,14 @@ jobs:
           mv $HOME/qutebrowser-bundle/glibc/ld-linker $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
           chmod +x $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
 
-      - name: 🔍 Check glibc bundle contents
+      - name: 🔍 Diagnostic: glibc files
         run: |
-          du -sh $HOME/qutebrowser-bundle/glibc || true
-          find $HOME/qutebrowser-bundle/glibc | wc -l || true
-          find $HOME/qutebrowser-bundle/glibc | head -n 20
+          du -sh $HOME/qutebrowser-bundle/glibc
+          find $HOME/qutebrowser-bundle/glibc | wc -l
 
-      - name: Write and compile fixed C launcher with debug output
+      - name: Write and compile C launcher
         run: |
           cat > $HOME/qutebrowser-bundle/usr/bin/launcher.c <<'EOF'
-          // [unchanged C code block from earlier]
           #define _GNU_SOURCE
           #include <stdio.h>
           #include <stdlib.h>
@@ -143,13 +141,6 @@ jobs:
               char lib_path[PATH_MAX];
               snprintf(lib_path, sizeof(lib_path), "%s/../lib", dir);
 
-              fprintf(stderr, "🔧 [DEBUG] Executable Path: %s\n", exe_path);
-              fprintf(stderr, "🔧 [DEBUG] Python Path:     %s\n", python_path);
-              fprintf(stderr, "🔧 [DEBUG] PYTHONHOME:      %s\n", pythonhome);
-              fprintf(stderr, "🔧 [DEBUG] PYTHONPATH:      %s\n", pythonpath);
-              fprintf(stderr, "🔧 [DEBUG] LD path:         %s\n", ld_path);
-              fprintf(stderr, "🔧 [DEBUG] LD_LIBRARY_PATH: %s\n", lib_path);
-
               setenv("PYTHONHOME", pythonhome, 1);
               setenv("PYTHONPATH", pythonpath, 1);
 
@@ -166,13 +157,8 @@ jobs:
               }
               ld_args[i] = NULL;
 
-              fprintf(stderr, "🔧 [DEBUG] Exec args:\n");
-              for (int j = 0; j < i; j++) {
-                  fprintf(stderr, "  argv[%d] = %s\n", j, ld_args[j]);
-              }
-
               execv(ld_path, ld_args);
-              perror("execv via ld-linux failed ❌ (are all glibc deps bundled?)");
+              perror("execv failed");
               return 1;
           }
           EOF
@@ -181,10 +167,9 @@ jobs:
           chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
           rm $HOME/qutebrowser-bundle/usr/bin/launcher.c
 
-      - name: Final check
+      - name: Final bundle check
         run: |
-          echo "📦 Bundle structure summary:"
-          du -sh $HOME/qutebrowser-bundle/* || true
+          du -sh $HOME/qutebrowser-bundle/*
           find $HOME/qutebrowser-bundle | wc -l
 
       - name: Create .tar.gz archive
