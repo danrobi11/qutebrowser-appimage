@@ -43,7 +43,7 @@ jobs:
             python3-pip \
             patchelf
 
-      - name: Install Qutebrowser via pip into --target directly
+      - name: Install Qutebrowser via pip into --target
         run: |
           export TARGET=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
           mkdir -p "$TARGET"
@@ -52,12 +52,12 @@ jobs:
       - name: Bundle Qutebrowser binary and dependencies
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
-          
+
           # Copy Python binary
           cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
-          # Copy shared libs used by Python
+          # Copy shared libraries used by Python
           ldd "$(which python3)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
             echo "Copying $lib"
             cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
@@ -94,5 +94,5 @@ EOF
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-portable
-          path: "$HOME/qutebrowser-portable.tar.gz"
+          path: $HOME/qutebrowser-portable.tar.gz
           if-no-files-found: error
