@@ -24,7 +24,8 @@ jobs:
             libffi8 \
             python3-pyqt5.qtwebengine \
             build-essential \
-            patchelf
+            patchelf \
+            gcc
 
       - name: Install Qutebrowser and PyQt5 into --target
         run: |
@@ -39,7 +40,7 @@ jobs:
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
           mkdir -p $HOME/qutebrowser-bundle/glibc
 
-          cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
+          cp "$(which python3.10)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
       - name: "🧪 Diagnostic: ldd output for bundled python3"
@@ -52,13 +53,13 @@ jobs:
           patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" \
             $HOME/qutebrowser-bundle/usr/bin/python3
 
-          ldd "$(which python3)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
+          ldd "$(which python3.10)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
             cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
           done
 
           find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-          stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
+          stdlib_dir=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
           cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
           find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
@@ -71,20 +72,24 @@ jobs:
           docker run --rm -v $HOME:/mnt ubuntu:22.04 bash -c "
             apt update && apt install -y libc6
             mkdir -p /mnt/qutebrowser-bundle/glibc
+
+            # Copy ld-linux and all its dependencies
             cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /mnt/qutebrowser-bundle/glibc/
-            cp -v /lib/x86_64-linux-gnu/libc.so.6 /mnt/qutebrowser-bundle/glibc/
-            cp -v /lib/x86_64-linux-gnu/libm.so.6 /mnt/qutebrowser-bundle/glibc/
-            cp -v /lib/x86_64-linux-gnu/libpthread.so.0 /mnt/qutebrowser-bundle/glibc/
-            cp -v /lib/x86_64-linux-gnu/librt.so.1 /mnt/qutebrowser-bundle/glibc/
-            cp -v /lib/x86_64-linux-gnu/libdl.so.2 /mnt/qutebrowser-bundle/glibc/
-            cp -v /lib/x86_64-linux-gnu/libnsl.so.1 /mnt/qutebrowser-bundle/glibc/
-            cp -v /lib/x86_64-linux-gnu/libresolv.so.2 /mnt/qutebrowser-bundle/glibc/
+            libs=\$(ldd /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 | awk '{print \$3}' | grep '^/')
+            for lib in \$libs; do
+              cp -v \$lib /mnt/qutebrowser-bundle/glibc/
+            done
           "
 
-          # Workaround: Docker files are sometimes immutable to chmod, so we copy again to fix permissions
+          # Fix permissions in case Docker sets files as immutable/root-owned
           cp -v $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/ld-linker
           mv $HOME/qutebrowser-bundle/glibc/ld-linker $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
           chmod +x $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
+
+      - name: 🔍 Check ldd for ld-linux
+        run: |
+          echo "🧪 ldd output for glibc/ld-linux:"
+          ldd $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2 || true
 
       - name: Write and compile fixed C launcher with debug output
         run: |
@@ -155,7 +160,7 @@ jobs:
               }
 
               execv(ld_path, ld_args);
-              perror("execv via ld-linux failed ❌");
+              perror("execv via ld-linux failed ❌ (are all glibc deps bundled?)");
               return 1;
           }
           EOF
