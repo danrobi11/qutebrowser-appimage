@@ -88,13 +88,21 @@ jobs:
         echo 'exec "$GLIBC/ld-linux-x86-64.so.2" --library-path "$LIB:$GLIBC" "$DIR/python3" -s -m qutebrowser "$@"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
         chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 
-    - name: Package portable binary
-      run: |
-        cd $HOME
-        tar -czf qutebrowser-portable.tar.gz qutebrowser-bundle
+        - name: List contents
+        run: |
+          find $HOME/qutebrowser-bundle
 
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
+        - name: Create .tar.gz archive
+        run: |
+          cd $HOME
+          tar -czvf $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz qutebrowser-bundle
+
+        - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qutebrowser-portable
+          path: ${{ github.workspace }}/qutebrowser-portable.tar.gz
+        uses: actions/upload-artifact@v4
+        with:
         name: qutebrowser-portable
         path: ${{ github.workspace }}/qutebrowser-portable.tar.gz
