@@ -29,7 +29,9 @@ jobs:
       - name: Install Qutebrowser and PyQt5 into --target
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
-          pip install --target=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages \
+          PYTHONPATH=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages \
+            python3.10 -m pip install --upgrade --no-deps \
+            --target=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages \
             qutebrowser pyqt5 pyqtwebengine
 
       - name: Bundle Qutebrowser binary and dependencies
