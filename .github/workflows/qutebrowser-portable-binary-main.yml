@@ -59,6 +59,10 @@ jobs:
           # real libffi
           find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
+          # C++ runtime for Qt (fix GLIBC_2.38 error)
+          cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* $HOME/qutebrowser-bundle/usr/lib/
+          cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 $HOME/qutebrowser-bundle/usr/lib/
+
           # glibc bundle
           if [ -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
             cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/
@@ -80,7 +84,7 @@ jobs:
               cp -v "$lib" $HOME/qutebrowser-bundle/glibc/
           done
 
-          # safe echo-based launcher
+          # Safe echo-based launcher
           echo '#!/bin/sh' > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
           echo 'DIR=$(dirname "$(readlink -f "$0")")' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
           echo 'GLIBC="$DIR/../glibc"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
