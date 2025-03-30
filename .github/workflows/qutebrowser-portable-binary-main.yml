@@ -43,7 +43,7 @@ jobs:
           cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
-          # Patch interpreter inside Python binary
+          # Patch interpreter to relative glibc path
           patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" \
             $HOME/qutebrowser-bundle/usr/bin/python3
 
@@ -87,7 +87,7 @@ jobs:
               cp -v "$lib" $HOME/qutebrowser-bundle/glibc/
           done
 
-      - name: Write and compile simplified C launcher
+      - name: Write and compile debug-enabled C launcher
         run: |-
           cat > $HOME/qutebrowser-bundle/usr/bin/launcher.c <<'EOF'
           #define _GNU_SOURCE
@@ -118,6 +118,12 @@ jobs:
               char pythonpath[PATH_MAX];
               snprintf(pythonpath, sizeof(pythonpath), "%s/../lib/python3.10/site-packages", dir);
 
+              // Debug output
+              fprintf(stderr, "🔧 [DEBUG] Executable Path: %s\n", exe_path);
+              fprintf(stderr, "🔧 [DEBUG] Python Path:     %s\n", python_path);
+              fprintf(stderr, "🔧 [DEBUG] PYTHONHOME:      %s\n", pythonhome);
+              fprintf(stderr, "🔧 [DEBUG] PYTHONPATH:      %s\n", pythonpath);
+
               setenv("PYTHONHOME", pythonhome, 1);
               setenv("PYTHONPATH", pythonpath, 1);
 
@@ -131,8 +137,13 @@ jobs:
               }
               args[i] = NULL;
 
+              fprintf(stderr, "🔧 [DEBUG] Exec args:\n");
+              for (int j = 0; j < i; j++) {
+                  fprintf(stderr, "  argv[%d] = %s\n", j, args[j]);
+              }
+
               execv(python_path, args);
-              perror("execv failed");
+              perror("execv failed ❌");
               return 1;
           }
           EOF
