@@ -40,6 +40,10 @@ jobs:
           cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
+          # Patch interpreter inside Python binary
+          patchelf --set-interpreter "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" \
+            $HOME/qutebrowser-bundle/usr/bin/python3
+
           # Shared libs used by Python
           ldd "$(which python3)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
             cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
@@ -56,7 +60,6 @@ jobs:
           find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
           # glibc bundle
-          # Copy dynamic linker
           if [ -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
             cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/
           elif [ -f /usr/lib/ld-linux-x86-64.so.2 ]; then
