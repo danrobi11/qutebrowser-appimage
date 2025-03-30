@@ -35,6 +35,13 @@ jobs:
             --target=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages \
             qutebrowser pyqt5 pyqtwebengine
 
+      - name: 🔍 Check pip installed files
+        run: |
+          echo "✅ site-packages contents:"
+          du -sh $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages || true
+          find $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages | wc -l || true
+          find $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages | head -n 20
+
       - name: Bundle Qutebrowser binary and dependencies
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
@@ -64,30 +71,41 @@ jobs:
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 $HOME/qutebrowser-bundle/usr/lib/
 
           stdlib_dir=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
+          echo "📚 Copying Python stdlib from: $stdlib_dir"
           cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
+
+      - name: 🔍 Check Python stdlib
+        run: |
+          du -sh $HOME/qutebrowser-bundle/usr/lib/python3.10 || true
+          find $HOME/qutebrowser-bundle/usr/lib/python3.10 | wc -l || true
+          find $HOME/qutebrowser-bundle/usr/lib/python3.10 | head -n 20
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
           docker run --rm -v $HOME:/mnt ubuntu:22.04 bash -c "
             apt update && apt install -y libc6
             mkdir -p /mnt/qutebrowser-bundle/glibc
-
             cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /mnt/qutebrowser-bundle/glibc/
-
             libs=\$(ldd /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 | awk '{print \$3}' | grep '^/')
             for lib in \$libs; do
               cp -v \$lib /mnt/qutebrowser-bundle/glibc/
             done
           "
 
-          # Workaround: Docker files are sometimes immutable
           cp -v $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/ld-linker
           mv $HOME/qutebrowser-bundle/glibc/ld-linker $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
           chmod +x $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
 
+      - name: 🔍 Check glibc bundle contents
+        run: |
+          du -sh $HOME/qutebrowser-bundle/glibc || true
+          find $HOME/qutebrowser-bundle/glibc | wc -l || true
+          find $HOME/qutebrowser-bundle/glibc | head -n 20
+
       - name: Write and compile fixed C launcher with debug output
         run: |
           cat > $HOME/qutebrowser-bundle/usr/bin/launcher.c <<'EOF'
+          // [unchanged C code block from earlier]
           #define _GNU_SOURCE
           #include <stdio.h>
           #include <stdlib.h>
@@ -163,12 +181,11 @@ jobs:
           chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
           rm $HOME/qutebrowser-bundle/usr/bin/launcher.c
 
-      - name: Final check for linker and content
+      - name: Final check
         run: |
-          echo "✅ Checking glibc content..."
-          file $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
-          ls -lh $HOME/qutebrowser-bundle/glibc/
-          echo "✅ Done."
+          echo "📦 Bundle structure summary:"
+          du -sh $HOME/qutebrowser-bundle/* || true
+          find $HOME/qutebrowser-bundle | wc -l
 
       - name: Create .tar.gz archive
         run: |
