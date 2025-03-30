@@ -107,7 +107,6 @@ jobs:
               }
               exe_path[len] = '\0';
 
-              // Copy before using dirname (which mutates the string)
               char exe_path_copy[PATH_MAX];
               strncpy(exe_path_copy, exe_path, sizeof(exe_path_copy));
               exe_path_copy[sizeof(exe_path_copy)-1] = '\0';
@@ -122,32 +121,42 @@ jobs:
               char pythonpath[PATH_MAX];
               snprintf(pythonpath, sizeof(pythonpath), "%s/../lib/python3.10/site-packages", dir);
 
-              // Debug output
+              char ld_path[PATH_MAX];
+              snprintf(ld_path, sizeof(ld_path), "%s/../glibc/ld-linux-x86-64.so.2", dir);
+
+              char lib_path[PATH_MAX];
+              snprintf(lib_path, sizeof(lib_path), "%s/../lib", dir);
+
               fprintf(stderr, "🔧 [DEBUG] Executable Path: %s\n", exe_path);
               fprintf(stderr, "🔧 [DEBUG] Python Path:     %s\n", python_path);
               fprintf(stderr, "🔧 [DEBUG] PYTHONHOME:      %s\n", pythonhome);
               fprintf(stderr, "🔧 [DEBUG] PYTHONPATH:      %s\n", pythonpath);
+              fprintf(stderr, "🔧 [DEBUG] LD path:         %s\n", ld_path);
+              fprintf(stderr, "🔧 [DEBUG] LD_LIBRARY_PATH: %s\n", lib_path);
 
               setenv("PYTHONHOME", pythonhome, 1);
               setenv("PYTHONPATH", pythonpath, 1);
 
-              char *args[argc + 3];
+              char *ld_args[argc + 7];
               int i = 0;
-              args[i++] = python_path;
-              args[i++] = "-m";
-              args[i++] = "qutebrowser";
+              ld_args[i++] = ld_path;
+              ld_args[i++] = "--library-path";
+              ld_args[i++] = lib_path;
+              ld_args[i++] = python_path;
+              ld_args[i++] = "-m";
+              ld_args[i++] = "qutebrowser";
               for (int j = 1; j < argc; j++) {
-                  args[i++] = argv[j];
+                  ld_args[i++] = argv[j];
               }
-              args[i] = NULL;
+              ld_args[i] = NULL;
 
               fprintf(stderr, "🔧 [DEBUG] Exec args:\n");
               for (int j = 0; j < i; j++) {
-                  fprintf(stderr, "  argv[%d] = %s\n", j, args[j]);
+                  fprintf(stderr, "  argv[%d] = %s\n", j, ld_args[j]);
               }
 
-              execv(python_path, args);
-              perror("execv failed ❌");
+              execv(ld_path, ld_args);
+              perror("execv via ld-linux failed ❌");
               return 1;
           }
           EOF
