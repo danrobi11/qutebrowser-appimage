@@ -24,7 +24,8 @@ jobs:
             libffi8 \
             python3-pyqt5.qtwebengine \
             build-essential \
-            patchelf
+            patchelf \
+            docker.io
 
       - name: Install Qutebrowser and PyQt5 into --target
         run: |
@@ -39,7 +40,6 @@ jobs:
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
           mkdir -p $HOME/qutebrowser-bundle/glibc
 
-          # Python binary
           cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
@@ -48,51 +48,40 @@ jobs:
           echo "🧪 ldd output for bundled python3:"
           ldd $HOME/qutebrowser-bundle/usr/bin/python3 || true
 
-      - name: Continue bundling dependencies
+      - name: Patch interpreter and bundle shared libraries
         run: |
-          # Patch interpreter to relative glibc path
           patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" \
             $HOME/qutebrowser-bundle/usr/bin/python3
 
-          # Shared libs used by Python
           ldd "$(which python3)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
             cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
           done
 
-          # libpython
           find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-          # stdlib
           stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
           cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
-          # real libffi
           find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-          # C++ runtime for Qt
           cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* $HOME/qutebrowser-bundle/usr/lib/
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 $HOME/qutebrowser-bundle/usr/lib/
 
-          # glibc bundle
-          if [ -f /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 ]; then
-            cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/
-          elif [ -f /usr/lib/ld-linux-x86-64.so.2 ]; then
-            cp -v /usr/lib/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/
-          else
-            echo "Dynamic linker ld-linux-x86-64.so.2 not found!"
-            exit 1
-          fi
-
-          for lib in \
-            /lib/x86_64-linux-gnu/libc.so.6 \
-            /lib/x86_64-linux-gnu/libm.so.6 \
-            /lib/x86_64-linux-gnu/libpthread.so.0 \
-            /lib/x86_64-linux-gnu/librt.so.1 \
-            /lib/x86_64-linux-gnu/libdl.so.2 \
-            /lib/x86_64-linux-gnu/libnsl.so.1 \
-            /lib/x86_64-linux-gnu/libresolv.so.2; do
-              cp -v "$lib" $HOME/qutebrowser-bundle/glibc/
-          done
+      - name: Extract dynamic linker and glibc from Ubuntu 22.04
+        run: |
+          docker run --rm -v $HOME:/mnt ubuntu:22.04 bash -c "
+            apt update && apt install -y libc6
+            mkdir -p /mnt/qutebrowser-bundle/glibc
+            cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /mnt/qutebrowser-bundle/glibc/
+            cp -v /lib/x86_64-linux-gnu/libc.so.6 /mnt/qutebrowser-bundle/glibc/
+            cp -v /lib/x86_64-linux-gnu/libm.so.6 /mnt/qutebrowser-bundle/glibc/
+            cp -v /lib/x86_64-linux-gnu/libpthread.so.0 /mnt/qutebrowser-bundle/glibc/
+            cp -v /lib/x86_64-linux-gnu/librt.so.1 /mnt/qutebrowser-bundle/glibc/
+            cp -v /lib/x86_64-linux-gnu/libdl.so.2 /mnt/qutebrowser-bundle/glibc/
+            cp -v /lib/x86_64-linux-gnu/libnsl.so.1 /mnt/qutebrowser-bundle/glibc/
+            cp -v /lib/x86_64-linux-gnu/libresolv.so.2 /mnt/qutebrowser-bundle/glibc/
+          "
+          chmod +x $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
 
       - name: Write and compile fixed C launcher with debug output
         run: |
@@ -172,9 +161,12 @@ jobs:
           chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
           rm $HOME/qutebrowser-bundle/usr/bin/launcher.c
 
-      - name: List contents
+      - name: Final check for linker and content
         run: |
-          find $HOME/qutebrowser-bundle
+          echo "✅ Checking glibc content..."
+          file $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
+          ls -lh $HOME/qutebrowser-bundle/glibc/
+          echo "✅ Done."
 
       - name: Create .tar.gz archive
         run: |
