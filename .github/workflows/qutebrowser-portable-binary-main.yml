@@ -67,8 +67,8 @@ jobs:
 
           printf '%s\n' '#!/bin/sh' \
             'DIR=$(dirname "$0")' \
-            'export PYTHONHOME="$DIR/../lib"' \
-            'export PYTHONPATH="$PYTHONHOME/python3.10/site-packages"' \
+            'export PYTHONHOME="$DIR/.."' \
+            'export PYTHONPATH="$PYTHONHOME/lib/python3.10/site-packages"' \
             'exec "$DIR/python3" -s -m qutebrowser "$@"' \
             > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 
