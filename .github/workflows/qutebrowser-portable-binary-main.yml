@@ -24,8 +24,7 @@ jobs:
             libffi8 \
             python3-pyqt5.qtwebengine \
             build-essential \
-            patchelf \
-            docker.io
+            patchelf
 
       - name: Install Qutebrowser and PyQt5 into --target
         run: |
