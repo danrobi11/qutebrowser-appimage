@@ -44,7 +44,7 @@ jobs:
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
           # Patch interpreter inside Python binary
-          patchelf --set-interpreter "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" \
+          patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" \
             $HOME/qutebrowser-bundle/usr/bin/python3
 
           # Shared libs used by Python
@@ -87,7 +87,7 @@ jobs:
               cp -v "$lib" $HOME/qutebrowser-bundle/glibc/
           done
 
-      - name: Write and compile C launcher
+      - name: Write and compile simplified C launcher
         run: |-
           cat > $HOME/qutebrowser-bundle/usr/bin/launcher.c <<'EOF'
           #define _GNU_SOURCE
@@ -109,18 +109,8 @@ jobs:
 
               char *dir = dirname(exe_path);
 
-              char glibc_path[PATH_MAX];
-              snprintf(glibc_path, sizeof(glibc_path), "%s/../glibc", dir);
-
-              // Fixed: use usr/lib instead of lib
-              char lib_path[PATH_MAX];
-              snprintf(lib_path, sizeof(lib_path), "%s/../usr/lib", dir);
-
               char python_path[PATH_MAX];
               snprintf(python_path, sizeof(python_path), "%s/python3", dir);
-
-              char ld_path[PATH_MAX];
-              snprintf(ld_path, sizeof(ld_path), "%s/ld-linux-x86-64.so.2", glibc_path);
 
               char pythonhome[PATH_MAX];
               snprintf(pythonhome, sizeof(pythonhome), "%s/..", dir);
@@ -131,26 +121,17 @@ jobs:
               setenv("PYTHONHOME", pythonhome, 1);
               setenv("PYTHONPATH", pythonpath, 1);
 
-              char full_ld_lib_path[PATH_MAX * 2];
-              snprintf(full_ld_lib_path, sizeof(full_ld_lib_path), "%s:%s", lib_path, glibc_path);
-              setenv("LD_LIBRARY_PATH", full_ld_lib_path, 1);
-
-              char *args[argc + 8];
+              char *args[argc + 3];
               int i = 0;
-              args[i++] = ld_path;
-              args[i++] = "--library-path";
-              args[i++] = full_ld_lib_path;
               args[i++] = python_path;
-              args[i++] = "-s";
               args[i++] = "-m";
               args[i++] = "qutebrowser";
-
               for (int j = 1; j < argc; j++) {
                   args[i++] = argv[j];
               }
               args[i] = NULL;
 
-              execv(ld_path, args);
+              execv(python_path, args);
               perror("execv failed");
               return 1;
           }
