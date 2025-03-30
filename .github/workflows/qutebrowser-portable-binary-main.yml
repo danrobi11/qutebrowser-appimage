@@ -110,8 +110,9 @@ jobs:
               char glibc_path[PATH_MAX];
               snprintf(glibc_path, sizeof(glibc_path), "%s/../glibc", dir);
 
+              // Fixed: use usr/lib instead of lib
               char lib_path[PATH_MAX];
-              snprintf(lib_path, sizeof(lib_path), "%s/../lib", dir);
+              snprintf(lib_path, sizeof(lib_path), "%s/../usr/lib", dir);
 
               char python_path[PATH_MAX];
               snprintf(python_path, sizeof(python_path), "%s/python3", dir);
