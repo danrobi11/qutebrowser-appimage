@@ -32,7 +32,7 @@ jobs:
             qutebrowser pyqt5 pyqtwebengine
 
       - name: Bundle Qutebrowser binary and dependencies
-        run: |
+        run: |-
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
           mkdir -p $HOME/qutebrowser-bundle/glibc
 
@@ -52,10 +52,10 @@ jobs:
           stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
           cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
-          # Copy real libffi
+          # real libffi
           find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-          # Bundle glibc
+          # glibc bundle
           for lib in \
             /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 \
             /lib/x86_64-linux-gnu/libc.so.6 \
@@ -68,19 +68,15 @@ jobs:
               cp -v "$lib" $HOME/qutebrowser-bundle/glibc/
           done
 
-          # Launcher
-          cat << 'EOF' > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-#!/bin/sh
-DIR=$(dirname "$(readlink -f "$0")")
-GLIBC="\$DIR/../glibc"
-LIB="\$DIR/../lib"
-
-export PYTHONHOME="\$DIR/.."
-export PYTHONPATH="\$PYTHONHOME/lib/python3.10/site-packages"
-export LD_LIBRARY_PATH="\$LIB:\$GLIBC"
-
-exec "\$GLIBC/ld-linux-x86-64.so.2" --library-path "\$LIB:\$GLIBC" "\$DIR/python3" -s -m qutebrowser "\$@"
-EOF
+          # safe echo-based launcher
+          echo '#!/bin/sh' > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'DIR=$(dirname "$(readlink -f "$0")")' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'GLIBC="$DIR/../glibc"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'LIB="$DIR/../lib"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'export PYTHONHOME="$DIR/.."' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'export PYTHONPATH="$PYTHONHOME/lib/python3.10/site-packages"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'export LD_LIBRARY_PATH="$LIB:$GLIBC"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'exec "$GLIBC/ld-linux-x86-64.so.2" --library-path "$LIB:$GLIBC" "$DIR/python3" -s -m qutebrowser "$@"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
           chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 
       - name: List contents
