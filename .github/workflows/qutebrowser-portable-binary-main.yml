@@ -1,8 +1,10 @@
-name: Build Qutebrowser Portable Binary
+name: qutebrowser-portable-binary-main
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
@@ -10,99 +12,85 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout source
+        uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y \
-          python3 python3-pip python3.10-venv \
-          libqt5webengine5 python3-pyqt5.qtwebengine \
-          python3-pyqt5.qtwebchannel \
-          python3-pyqt5 \
-          libglib2.0-dev \
-          libgl1 libx11-6 \
-          libxcomposite1 libxcursor1 libxdamage1 libxfixes3 \
-          libxi6 libxtst6 libnss3 libatk1.0-0 libatk-bridge2.0-0 \
-          libcups2 libxrandr2 libgbm1 libpangocairo-1.0-0 \
-          libpango-1.0-0 libgtk-3-0 libxss1 libxext6 \
-          libxrender1 libxcb1 libx11-xcb1 libxcb-glx0 \
-          libegl1 libepoxy0 libxcb-dri2-0 libxcb-dri3-0 \
-          libdrm2 libxshmfence1 libxcb-present0 \
-          libxcb-sync1 libwayland-client0 libwayland-server0 \
-          libwayland-egl1 libwayland-cursor0 libwayland-bin \
-          libexpat1 libstdc++6 libgcc-s1 libffi8
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            python3-pip \
+            python3.10 \
+            libffi8 \
+            python3-pyqt5.qtwebengine \
+            patchelf
 
-    - name: Install Qutebrowser and PyQt5
-      run: |
-        mkdir -p $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
-        pip install --target=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages \
-          qutebrowser pyqt5 pyqtwebengine
+      - name: Install Qutebrowser and PyQt5 into --target
+        run: |
+          mkdir -p $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
+          pip install --target=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages \
+            qutebrowser pyqt5 pyqtwebengine
 
-    - name: Bundle Python and libraries
-      run: |
-        mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
-        mkdir -p $HOME/qutebrowser-bundle/glibc
+      - name: Bundle Qutebrowser binary and dependencies
+        run: |-
+          mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
+          mkdir -p $HOME/qutebrowser-bundle/glibc
 
-        # Python binary
-        cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
-        chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
+          # Python binary
+          cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
+          chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
-        # Shared libs used by Python
-        ldd "$(which python3)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
-          cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
-        done
+          # Shared libs used by Python
+          ldd "$(which python3)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
+            cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
+          done
 
-        # libpython
-        find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
+          # libpython
+          find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-        # stdlib
-        stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
-        cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
+          # stdlib
+          stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
+          cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
-        # real libffi
-        find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
+          # real libffi
+          find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-        # glibc bundle
-        cp /lib64/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/
-        for lib in \
-          /lib/x86_64-linux-gnu/libc.so.6 \
-          /lib/x86_64-linux-gnu/libm.so.6 \
-          /lib/x86_64-linux-gnu/libpthread.so.0 \
-          /lib/x86_64-linux-gnu/librt.so.1 \
-          /lib/x86_64-linux-gnu/libdl.so.2 \
-          /lib/x86_64-linux-gnu/libnsl.so.1 \
-          /lib/x86_64-linux-gnu/libresolv.so.2; do
-            cp -v "$lib" $HOME/qutebrowser-bundle/glibc/
-        done
+          # glibc bundle
+          for lib in \
+            /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 \
+            /lib/x86_64-linux-gnu/libc.so.6 \
+            /lib/x86_64-linux-gnu/libm.so.6 \
+            /lib/x86_64-linux-gnu/libpthread.so.0 \
+            /lib/x86_64-linux-gnu/librt.so.1 \
+            /lib/x86_64-linux-gnu/libdl.so.2 \
+            /lib/x86_64-linux-gnu/libnsl.so.1 \
+            /lib/x86_64-linux-gnu/libresolv.so.2; do
+              cp -v "$lib" $HOME/qutebrowser-bundle/glibc/
+          done
 
-        # safe echo-based launcher
-        echo '#!/bin/sh' > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-        echo 'DIR=$(dirname "$(readlink -f "$0")")' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-        echo 'GLIBC="$DIR/../glibc"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-        echo 'LIB="$DIR/../lib"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-        echo 'export PYTHONHOME="$DIR/.."' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-        echo 'export PYTHONPATH="$PYTHONHOME/lib/python3.10/site-packages"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-        echo 'export LD_LIBRARY_PATH="$LIB:$GLIBC"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-        echo 'exec "$GLIBC/ld-linux-x86-64.so.2" --library-path "$LIB:$GLIBC" "$DIR/python3" -s -m qutebrowser "$@"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
-        chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          # safe echo-based launcher
+          echo '#!/bin/sh' > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'DIR=$(dirname "$(readlink -f "$0")")' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'GLIBC="$DIR/../glibc"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'LIB="$DIR/../lib"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'export PYTHONHOME="$DIR/.."' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'export PYTHONPATH="$PYTHONHOME/lib/python3.10/site-packages"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'export LD_LIBRARY_PATH="$LIB:$GLIBC"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          echo 'exec "$GLIBC/ld-linux-x86-64.so.2" --library-path "$LIB:$GLIBC" "$DIR/python3" -s -m qutebrowser "$@"' >> $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 
-        - name: List contents
+      - name: List contents
         run: |
           find $HOME/qutebrowser-bundle
 
-        - name: Create .tar.gz archive
+      - name: Create .tar.gz archive
         run: |
           cd $HOME
           tar -czvf $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz qutebrowser-bundle
 
-        - name: Upload artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-portable
           path: ${{ github.workspace }}/qutebrowser-portable.tar.gz
-        uses: actions/upload-artifact@v4
-        with:
-        name: qutebrowser-portable
-        path: ${{ github.workspace }}/qutebrowser-portable.tar.gz
+          if-no-files-found: error
