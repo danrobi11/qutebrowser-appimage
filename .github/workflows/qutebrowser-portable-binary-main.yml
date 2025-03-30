@@ -24,8 +24,7 @@ jobs:
             libffi8 \
             python3-pyqt5.qtwebengine \
             build-essential \
-            patchelf \
-            gcc
+            patchelf
 
       - name: Install Qutebrowser and PyQt5 into --target
         run: |
@@ -73,23 +72,20 @@ jobs:
             apt update && apt install -y libc6
             mkdir -p /mnt/qutebrowser-bundle/glibc
 
-            # Copy ld-linux and all its dependencies
+            # Copy dynamic linker
             cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /mnt/qutebrowser-bundle/glibc/
+
+            # Copy all libraries the linker depends on
             libs=\$(ldd /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 | awk '{print \$3}' | grep '^/')
             for lib in \$libs; do
               cp -v \$lib /mnt/qutebrowser-bundle/glibc/
             done
           "
 
-          # Fix permissions in case Docker sets files as immutable/root-owned
+          # Workaround: Docker files may be root-owned or immutable
           cp -v $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/ld-linker
           mv $HOME/qutebrowser-bundle/glibc/ld-linker $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
           chmod +x $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
-
-      - name: 🔍 Check ldd for ld-linux
-        run: |
-          echo "🧪 ldd output for glibc/ld-linux:"
-          ldd $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2 || true
 
       - name: Write and compile fixed C launcher with debug output
         run: |
