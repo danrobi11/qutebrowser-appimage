@@ -80,6 +80,10 @@ jobs:
             cp -v /lib/x86_64-linux-gnu/libnsl.so.1 /mnt/qutebrowser-bundle/glibc/
             cp -v /lib/x86_64-linux-gnu/libresolv.so.2 /mnt/qutebrowser-bundle/glibc/
           "
+
+          # Workaround: Docker files are sometimes immutable to chmod, so we copy again to fix permissions
+          cp -v $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/ld-linker
+          mv $HOME/qutebrowser-bundle/glibc/ld-linker $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
           chmod +x $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
 
       - name: Write and compile fixed C launcher with debug output
