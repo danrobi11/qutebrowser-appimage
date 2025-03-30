@@ -46,7 +46,6 @@ jobs:
 
       - name: Check bundled site-packages
         run: |
-          echo "Checking site-packages directory:"
           du -sh "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages" || true
           find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages" | wc -l || true
 
@@ -74,7 +73,6 @@ jobs:
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 $HOME/qutebrowser-bundle/usr/lib/
 
           stdlib_dir=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
-          echo "Copying Python stdlib from: $stdlib_dir"
           cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
       - name: Check Python stdlib
@@ -84,15 +82,17 @@ jobs:
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
-          docker run --rm -v $HOME:/mnt ubuntu:22.04 bash -c "
+          docker run --rm -v $HOME:/mnt ubuntu:22.04 bash -c '
             apt update && apt install -y libc6
-            mkdir -p /mnt/qutebrowser-bundle/glibc
-            cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 /mnt/qutebrowser-bundle/glibc/
-            libs=\$(ldd /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 | awk '{print \$3}' | grep '^/')
-            for lib in \$libs; do
-              cp -v \$lib /mnt/qutebrowser-bundle/glibc/
+            ldpath="/mnt/qutebrowser-bundle/glibc"
+            mkdir -p "$ldpath"
+
+            cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$ldpath/"
+
+            ldd /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 | awk '"'"'{print $3}'"'"' | grep "^/" | while read lib; do
+              cp -v "$lib" "$ldpath/"
             done
-          "
+          '
 
           cp -v $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/ld-linker
           mv $HOME/qutebrowser-bundle/glibc/ld-linker $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
