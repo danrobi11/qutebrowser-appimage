@@ -144,6 +144,8 @@ jobs:
               char lib_path[PATH_MAX];
               snprintf(lib_path, sizeof(lib_path), "%s/../lib", dir);
 
+              // Set up library path
+              setenv("LD_LIBRARY_PATH", lib_path, 1);
               setenv("PYTHONHOME", pythonhome, 1);
               setenv("PYTHONPATH", pythonpath, 1);
 
