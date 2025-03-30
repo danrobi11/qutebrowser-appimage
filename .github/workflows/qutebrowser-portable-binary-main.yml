@@ -88,7 +88,69 @@ jobs:
       - name: Write and compile C launcher
         run: |-
           cat > $HOME/qutebrowser-bundle/usr/bin/launcher.c <<'EOF'
-          [INSERT LAUNCHER.C CODE HERE FROM ABOVE]
+          #define _GNU_SOURCE
+          #include <stdio.h>
+          #include <stdlib.h>
+          #include <libgen.h>
+          #include <limits.h>
+          #include <unistd.h>
+          #include <string.h>
+
+          int main(int argc, char **argv) {
+              char exe_path[PATH_MAX];
+              ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path)-1);
+              if (len == -1) {
+                  perror("readlink");
+                  return 1;
+              }
+              exe_path[len] = '\0';
+
+              char *dir = dirname(exe_path);
+
+              char glibc_path[PATH_MAX];
+              snprintf(glibc_path, sizeof(glibc_path), "%s/../glibc", dir);
+
+              char lib_path[PATH_MAX];
+              snprintf(lib_path, sizeof(lib_path), "%s/../lib", dir);
+
+              char python_path[PATH_MAX];
+              snprintf(python_path, sizeof(python_path), "%s/python3", dir);
+
+              char ld_path[PATH_MAX];
+              snprintf(ld_path, sizeof(ld_path), "%s/ld-linux-x86-64.so.2", glibc_path);
+
+              char pythonhome[PATH_MAX];
+              snprintf(pythonhome, sizeof(pythonhome), "%s/..", dir);
+
+              char pythonpath[PATH_MAX];
+              snprintf(pythonpath, sizeof(pythonpath), "%s/../lib/python3.10/site-packages", dir);
+
+              setenv("PYTHONHOME", pythonhome, 1);
+              setenv("PYTHONPATH", pythonpath, 1);
+
+              char full_ld_lib_path[PATH_MAX * 2];
+              snprintf(full_ld_lib_path, sizeof(full_ld_lib_path), "%s:%s", lib_path, glibc_path);
+              setenv("LD_LIBRARY_PATH", full_ld_lib_path, 1);
+
+              char *args[argc + 8];
+              int i = 0;
+              args[i++] = ld_path;
+              args[i++] = "--library-path";
+              args[i++] = full_ld_lib_path;
+              args[i++] = python_path;
+              args[i++] = "-s";
+              args[i++] = "-m";
+              args[i++] = "qutebrowser";
+
+              for (int j = 1; j < argc; j++) {
+                  args[i++] = argv[j];
+              }
+              args[i] = NULL;
+
+              execv(ld_path, args);
+              perror("execv failed");
+              return 1;
+          }
           EOF
 
           gcc -O2 -Wall -static-libgcc -o $HOME/qutebrowser-bundle/usr/bin/qutebrowser $HOME/qutebrowser-bundle/usr/bin/launcher.c
