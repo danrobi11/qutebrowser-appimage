@@ -80,11 +80,11 @@ jobs:
       - name: Create .tar.gz archive
         run: |
           cd $HOME
-          tar -czvf qutebrowser-portable.tar.gz qutebrowser-bundle
+          tar -czvf $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz qutebrowser-bundle
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-portable
-          path: qutebrowser-portable.tar.gz
+          path: ${{ github.workspace }}/qutebrowser-portable.tar.gz
           if-no-files-found: error
