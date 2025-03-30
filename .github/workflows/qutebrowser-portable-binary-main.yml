@@ -35,7 +35,7 @@ jobs:
             qutebrowser pyqt5 pyqtwebengine
 
       - name: Bundle Qutebrowser binary and dependencies
-        run: |-
+        run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
           mkdir -p $HOME/qutebrowser-bundle/glibc
 
@@ -43,13 +43,13 @@ jobs:
           cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
-      - name: 🧪 Diagnostic: ldd output for bundled python3
+      - name: "🧪 Diagnostic: ldd output for bundled python3"
         run: |
           echo "🧪 ldd output for bundled python3:"
           ldd $HOME/qutebrowser-bundle/usr/bin/python3 || true
 
       - name: Continue bundling dependencies
-        run: |-
+        run: |
           # Patch interpreter to relative glibc path
           patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" \
             $HOME/qutebrowser-bundle/usr/bin/python3
@@ -95,7 +95,7 @@ jobs:
           done
 
       - name: Write and compile fixed C launcher with debug output
-        run: |-
+        run: |
           cat > $HOME/qutebrowser-bundle/usr/bin/launcher.c <<'EOF'
           #define _GNU_SOURCE
           #include <stdio.h>
