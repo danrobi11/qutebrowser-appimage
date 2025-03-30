@@ -43,6 +43,13 @@ jobs:
           cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
+      - name: 🧪 Diagnostic: ldd output for bundled python3
+        run: |
+          echo "🧪 ldd output for bundled python3:"
+          ldd $HOME/qutebrowser-bundle/usr/bin/python3 || true
+
+      - name: Continue bundling dependencies
+        run: |-
           # Patch interpreter to relative glibc path
           patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" \
             $HOME/qutebrowser-bundle/usr/bin/python3
