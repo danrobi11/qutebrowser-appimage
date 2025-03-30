@@ -45,45 +45,35 @@ jobs:
 
       - name: Install Qutebrowser via pip into --target
         run: |
-          export BUNDLE_DIR=$HOME/qutebrowser-bundle
-          export TARGET=$BUNDLE_DIR/usr/lib/python3.10/site-packages
-          mkdir -p "$TARGET"
-          pip install --target="$TARGET" qutebrowser
+          mkdir -p $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
+          pip install --target=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages qutebrowser
 
       - name: Bundle Qutebrowser binary and dependencies
         run: |
-          export BUNDLE_DIR=$HOME/qutebrowser-bundle
-          mkdir -p $BUNDLE_DIR/usr/{bin,lib,share/applications,lib/python3.10}
+          mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
 
-          # Copy Python binary
-          cp "$(which python3)" $BUNDLE_DIR/usr/bin/python3
-          chmod +x $BUNDLE_DIR/usr/bin/python3
+          cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
+          chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
-          # Copy shared libraries used by Python
           ldd "$(which python3)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
-            echo "Copying $lib"
-            cp -v "$lib" $BUNDLE_DIR/usr/lib/
+            cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
           done
 
-          # Copy libpython
-          find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $BUNDLE_DIR/usr/lib/ \;
+          find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-          # Copy Python stdlib
           stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
-          echo "Copying stdlib from $stdlib_dir"
-          cp -r "$stdlib_dir" $BUNDLE_DIR/usr/lib/
+          cp -r "$stdlib_dir" $HOME/qutebrowser-bundle/usr/lib/
 
-          # Create launcher script using printf
           printf '%s\n' '#!/bin/sh' \
             'DIR=$(dirname "$0")' \
             'export PYTHONHOME="$DIR/../lib"' \
             'export PYTHONPATH="$PYTHONHOME/python3.10/site-packages"' \
             'exec "$DIR/python3" -s -m qutebrowser "$@"' \
-            > $BUNDLE_DIR/usr/bin/qutebrowser
+            > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 
-          chmod +x $BUNDLE_DIR/usr/bin/qutebrowser
+          chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 
-      - name: List bundle contents
+      - name: List contents
         run: |
           find $HOME/qutebrowser-bundle
 
@@ -91,11 +81,10 @@ jobs:
         run: |
           cd $HOME
           tar -czvf qutebrowser-portable.tar.gz qutebrowser-bundle
-          ls -lh qutebrowser-portable.tar.gz
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-portable
-          path: ${{ env.HOME }}/qutebrowser-portable.tar.gz
+          path: qutebrowser-portable.tar.gz
           if-no-files-found: error
