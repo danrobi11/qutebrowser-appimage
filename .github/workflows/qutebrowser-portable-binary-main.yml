@@ -62,7 +62,8 @@ jobs:
           find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
           stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
-          cp -r "$stdlib_dir" $HOME/qutebrowser-bundle/usr/lib/
+          echo "Copying stdlib from $stdlib_dir"
+          cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
           printf '%s\n' '#!/bin/sh' \
             'DIR=$(dirname "$0")' \
