@@ -10,6 +10,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -51,7 +52,7 @@ jobs:
       - name: Bundle Qutebrowser binary and dependencies
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
-
+          
           # Copy Python binary
           cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
@@ -62,15 +63,15 @@ jobs:
             cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
           done
 
-          # Copy libpython shared object
+          # Copy libpython
           find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-          # Copy Python stdlib (needed for encodings, etc.)
+          # Copy Python stdlib
           stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
           echo "Copying stdlib from $stdlib_dir"
           cp -r "$stdlib_dir" $HOME/qutebrowser-bundle/usr/lib/
 
-          # Create qutebrowser launcher
+          # Create launcher script
           cat << 'EOF' > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 #!/bin/sh
 DIR=$(dirname "$0")
