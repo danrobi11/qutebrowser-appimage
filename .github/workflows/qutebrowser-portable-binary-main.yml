@@ -15,15 +15,17 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y \
             python3-pip \
-            patchelf \
-            libffi8  # required for Python's ctypes
+            python3.10 \
+            libffi8 \
+            python3-pyqt5.qtwebengine \
+            patchelf
 
-      - name: Install Qutebrowser and PyQt5 via pip into --target
+      - name: Install Qutebrowser and PyQt5 into --target
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages
           pip install --target=$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages \
@@ -32,36 +34,53 @@ jobs:
       - name: Bundle Qutebrowser binary and dependencies
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
+          mkdir -p $HOME/qutebrowser-bundle/glibc
 
           # Python binary
           cp "$(which python3)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
-          # Shared libs used by python3
+          # Shared libs used by Python
           ldd "$(which python3)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
             cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
           done
 
-          # Copy libpython
+          # libpython
           find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
-          # Copy real libffi.so.8 from Ubuntu 22.04
-          find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
-
-          # Copy Python stdlib
+          # stdlib
           stdlib_dir=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
           cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
-          # Create launcher
-          printf '%s\n' '#!/bin/sh' \
-            'unset LD_LIBRARY_PATH' \
-            'DIR=$(dirname "$0")' \
-            'export PYTHONHOME="$DIR/.."' \
-            'export PYTHONPATH="$PYTHONHOME/lib/python3.10/site-packages"' \
-            'export LD_LIBRARY_PATH="$DIR/../lib"' \
-            'exec "$DIR/python3" -s -m qutebrowser "$@"' \
-            > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+          # Copy real libffi
+          find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
 
+          # Bundle glibc
+          for lib in \
+            /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 \
+            /lib/x86_64-linux-gnu/libc.so.6 \
+            /lib/x86_64-linux-gnu/libm.so.6 \
+            /lib/x86_64-linux-gnu/libpthread.so.0 \
+            /lib/x86_64-linux-gnu/librt.so.1 \
+            /lib/x86_64-linux-gnu/libdl.so.2 \
+            /lib/x86_64-linux-gnu/libnsl.so.1 \
+            /lib/x86_64-linux-gnu/libresolv.so.2; do
+              cp -v "$lib" $HOME/qutebrowser-bundle/glibc/
+          done
+
+          # Launcher
+          cat << 'EOF' > $HOME/qutebrowser-bundle/usr/bin/qutebrowser
+#!/bin/sh
+DIR=$(dirname "$(readlink -f "$0")")
+GLIBC="\$DIR/../glibc"
+LIB="\$DIR/../lib"
+
+export PYTHONHOME="\$DIR/.."
+export PYTHONPATH="\$PYTHONHOME/lib/python3.10/site-packages"
+export LD_LIBRARY_PATH="\$LIB:\$GLIBC"
+
+exec "\$GLIBC/ld-linux-x86-64.so.2" --library-path "\$LIB:\$GLIBC" "\$DIR/python3" -s -m qutebrowser "\$@"
+EOF
           chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
 
       - name: List contents
