@@ -74,7 +74,6 @@ jobs:
           # Merge platstdlib carefully
           if [ "$PYTHON_STDLIB" != "$PYTHON_PLATSTDLIB" ] && [ -d "$PYTHON_PLATSTDLIB" ]; then
             echo "Merging platstdlib: $PYTHON_PLATSTDLIB"
-            # Use -n (noclobber) to avoid overwriting files from stdlib? Or just copy over? Copy over is safer.
             cp -ar -T "$PYTHON_PLATSTDLIB" "$BUNDLE_DIR/usr/lib/python3.10/"
           fi
           # Copy site-packages from venv
@@ -146,7 +145,6 @@ jobs:
             if [[ "$current_file" == "$BUNDLE_DIR/glibc/"* || -v COPIED_LIBS["$current_basename"] ]]; then
                 continue
             fi
-            # Mark this file as processed *before* running ldd to prevent loops on self-dependency? No, mark after copy.
 
             echo "Processing dependencies for: $(basename "$current_file")"
             ldd_output=$(ldd "$current_file" 2>/dev/null || true)
@@ -170,8 +168,7 @@ jobs:
                   continue # Skip trying to copy it again
               fi
 
-              # Is it a core glibc lib we expect in glibc/? (Avoid copying system glibc to usr/lib)
-              # This check needs refinement if specific non-core glibc libs are needed outside glibc/ dir
+              # Is it a core glibc lib we expect in glibc/?
               is_expected_glibc=0
               for core_lib_pattern in libc\.so libpthread\.so libdl\.so librt\.so libm\.so libgcc_s\.so ld-linux ; do
                   if [[ "$lib_path" == */"$core_lib_pattern"* ]]; then
@@ -181,7 +178,6 @@ jobs:
               done
               if [[ $is_expected_glibc -eq 1 ]]; then
                    echo "  Skipping expected glibc lib: $lib_path (should be in glibc/ dir)"
-                   # Mark it conceptually copied if not already tracked
                    if [[ ! -v COPIED_LIBS["$lib_basename"] ]]; then COPIED_LIBS["$lib_basename"]=1; fi
                    continue
               fi
@@ -399,7 +395,8 @@ EOF
           PYQT_CORE_SO=$(find "$BUNDLE_DIR/usr/lib/python3.10/site-packages/PyQt5" -name QtCore.so -print -quit || true)
           if [ -n "$PYQT_CORE_SO" ]; then readelf -d "$PYQT_CORE_SO" | grep 'RUNPATH' || true; fi
           echo "--- Linker Info for libQt5Core ---"
-          QT_CORE_SO=$(find "$BUNDLE_DIR/usr/lib" -maxdepth 1 -name libQt5Core.so -print -quit || true) # Find .so not .so.X
+          # Find .so specifically, not .so.X links which might confuse readelf
+          QT_CORE_SO=$(find "$BUNDLE_DIR/usr/lib" -maxdepth 1 -name libQt5Core.so -print -quit || true) 
           if [ -n "$QT_CORE_SO" ]; then readelf -d "$QT_CORE_SO" | grep 'RUNPATH' || true; fi
           echo "--- Checking Qt Conf ---"
           cat "$BUNDLE_DIR/usr/bin/qt.conf" || true
@@ -415,14 +412,13 @@ EOF
           sha256sum $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz > $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz.sha256
           cat $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz.sha256
 
-      # Correctly indented upload step
+      # Step where error was reported (around line 300 in previous attempt)
+      # Using standard 2-space list item indent, 4-space key indent, 6-space 'with' key indent
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-portable
-          # path uses multi-line literal style (|)
           path: |
             ${{ github.workspace }}/qutebrowser-portable.tar.gz
             ${{ github.workspace }}/qutebrowser-portable.tar.gz.sha256
-          # if-no-files-found is at the same indentation level as name and path
           if-no-files-found: error
