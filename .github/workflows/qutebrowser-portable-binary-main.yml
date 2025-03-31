@@ -1,39 +1,23 @@
-# Top level keys have no indent
 name: qutebrowser-portable-binary-main
 
-# Top level key
 on:
-  # Indent level 1 (2 spaces)
   push:
-    # Indent level 2 (4 spaces)
     branches: [ main ]
-  # Indent level 1 (2 spaces)
   pull_request:
-    # Indent level 2 (4 spaces)
     branches: [ main ]
-  # Indent level 1 (2 spaces)
   workflow_dispatch:
 
-# Top level key
 jobs:
-  # Indent level 1 (2 spaces)
   build:
-    # Indent level 2 (4 spaces)
     runs-on: ubuntu-22.04
 
-    # Indent level 2 (4 spaces)
     steps:
-      # Indent level 3 (6 spaces) - Start of a list item '-'
       - name: Checkout source
-        # Indent level 4 (8 spaces) - Keys within the list item
         uses: actions/checkout@v4
 
-      # Indent level 3 (6 spaces)
       - name: Install build and runtime dependencies
-        # Indent level 4 (8 spaces)
         run: |
           sudo apt update
-          # Using --no-install-recommends to keep the image smaller
           sudo apt install -y --no-install-recommends \
             python3.10 \
             python3-pip \
@@ -43,44 +27,32 @@ jobs:
             wget \
             libglib2.0-0 # Often needed by Qt/Python libs
 
-      # Indent level 3 (6 spaces)
       - name: Create and activate virtual environment
-        # Indent level 4 (8 spaces)
         run: |
           python3.10 -m venv $HOME/qute-venv
-          # Using '. ' which is equivalent to 'source' but more portable
           . $HOME/qute-venv/bin/activate
 
-      # Indent level 3 (6 spaces)
       - name: Install Qutebrowser and PyQt5/WebEngine into venv
-        # Indent level 4 (8 spaces)
         run: |
           . $HOME/qute-venv/bin/activate
           pip install --upgrade pip
           pip install --no-cache-dir qutebrowser pyqt5 pyqtwebengine
           pip show qutebrowser || exit 1
 
-      # Indent level 3 (6 spaces)
       - name: Prepare bundle structure
-        # Indent level 4 (8 spaces)
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share}
           mkdir -p $HOME/qutebrowser-bundle/qt5 # For Qt resources
           mkdir -p $HOME/qutebrowser-bundle/glibc
-          # Export variables for use in subsequent steps via GITHUB_ENV
           export BUNDLE_DIR="$HOME/qutebrowser-bundle"
           export BUNDLE_USR_LIB="$BUNDLE_DIR/usr/lib"
           echo "BUNDLE_DIR=$BUNDLE_DIR" >> $GITHUB_ENV
           echo "BUNDLE_USR_LIB=$BUNDLE_USR_LIB" >> $GITHUB_ENV
 
-      # Indent level 3 (6 spaces)
       - name: Bundle Python interpreter and standard library
-        # Indent level 4 (8 spaces)
         run: |
           . $HOME/qute-venv/bin/activate
-          # Copy interpreter
           cp "$(which python3.10)" "$BUNDLE_DIR/usr/bin/python3"
-          # Copy essential Python libs (example: zlib)
           ZLIB_SO=$(find /usr/lib/python3.10 /usr/lib/x86_64-linux-gnu -name 'zlib.so*' -print -quit || true)
           if [[ -n "$ZLIB_SO" ]] && [[ -f "$ZLIB_SO" ]]; then
              echo "Copying zlib: $ZLIB_SO"
@@ -88,69 +60,48 @@ jobs:
           else
              echo "Warning: Could not find shared zlib library (zlib.so*)."
           fi
-          # Copy entire standard library (needed for PYTHONHOME)
           PYTHON_STDLIB=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
           PYTHON_PLATSTDLIB=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('platstdlib'))")
           mkdir -p "$BUNDLE_DIR/usr/lib/python3.10"
-          # Use -T with cp to treat destination as a directory, avoids issues if python3.10 exists as a file
           cp -ar -T "$PYTHON_STDLIB" "$BUNDLE_DIR/usr/lib/python3.10/"
-          # Merge platstdlib carefully
           if [ "$PYTHON_STDLIB" != "$PYTHON_PLATSTDLIB" ] && [ -d "$PYTHON_PLATSTDLIB" ]; then
             echo "Merging platstdlib: $PYTHON_PLATSTDLIB"
             cp -ar -T "$PYTHON_PLATSTDLIB" "$BUNDLE_DIR/usr/lib/python3.10/"
           fi
-          # Copy site-packages from venv
-          echo "Copying site-packages from $HOME/qute-venv/lib/python3.10/site-packages"
-          mkdir -p "$BUNDLE_DIR/usr/lib/python3.10/site-packages" # Ensure target exists
-          # Handle case where site-packages might be empty
+          mkdir -p "$BUNDLE_DIR/usr/lib/python3.10/site-packages"
           if [ -d "$HOME/qute-venv/lib/python3.10/site-packages" ] && [ -n "$(ls -A $HOME/qute-venv/lib/python3.10/site-packages)" ]; then
             cp -ar $HOME/qute-venv/lib/python3.10/site-packages/* "$BUNDLE_DIR/usr/lib/python3.10/site-packages/"
           else
             echo "Warning: No site-packages found or directory is empty."
           fi
 
-      # Indent level 3 (6 spaces)
       - name: Bundle Glibc / Dynamic Linker
-        # Indent level 4 (8 spaces)
         run: |
-          # Copy the dynamic linker
           LD_SO=$(ldd /bin/ls | grep 'ld-linux' | head -n 1 | awk '{print $1}')
-          if [ -z "$LD_SO" ]; then LD_SO=$(find /lib* /usr/lib* -name 'ld-*.so.?' -type f -print -quit); fi # Fallback find
+          if [ -z "$LD_SO" ]; then LD_SO=$(find /lib* /usr/lib* -name 'ld-*.so.?' -type f -print -quit); fi
           echo "Found dynamic linker: $LD_SO"
           if [ -z "$LD_SO" ] || [ ! -f "$LD_SO" ]; then echo "ERROR: Cannot find dynamic linker!"; exit 1; fi
           cp -vL "$LD_SO" "$BUNDLE_DIR/glibc/"
-          # Copy essential libc components needed by the linker and basic apps
           NEEDED_GLIBC_LIBS=()
-          # Use ldd on the linker itself to find its direct basic needs
           ldd "$LD_SO" | awk '/=> \// {print $3}' | while read -r lib; do NEEDED_GLIBC_LIBS+=("$lib"); done
-          # Add common core libs explicitly if not found by ldd on linker
           NEEDED_GLIBC_LIBS+=( $(ldd /bin/ls | awk '/libc\.so|libpthread\.so|libdl\.so|librt\.so|libm\.so|libgcc_s\.so|libresolv\.so|libnss_dns\.so/ {print $3}') )
-          # Deduplicate and copy
           printf "%s\n" "${NEEDED_GLIBC_LIBS[@]}" | sort -u | while read -r lib_path; do
             if [ -n "$lib_path" ] && [ -f "$lib_path" ]; then
                echo "Copying essential glibc dependency: $lib_path"
                cp -vL "$lib_path" "$BUNDLE_DIR/glibc/"
             fi
           done
-          # Ensure executable permission for the linker
           chmod +x "$BUNDLE_DIR/glibc/$(basename "$LD_SO")"
 
-      # Indent level 3 (6 spaces)
       - name: Recursively find and bundle ALL required shared libraries
-        # Indent level 4 (8 spaces)
         run: |
           . $HOME/qute-venv/bin/activate
-          declare -A COPIED_LIBS # Keep track of copied libs basename to avoid duplicates/loops
-          declare -a TO_PROCESS # Use explicit array declaration
+          declare -A COPIED_LIBS
+          declare -a TO_PROCESS
 
-          # Add Python interpreter first
           TO_PROCESS+=("$BUNDLE_DIR/usr/bin/python3")
-
-          # Add shared objects from site-packages (PyQt5, etc.)
           find "$BUNDLE_DIR/usr/lib/python3.10/site-packages" -name '*.so' -print0 | while IFS= read -r -d $'\0' file; do TO_PROCESS+=("$file"); done
           find "$BUNDLE_DIR/usr/lib/python3.10/site-packages" -name '*.so.*' -print0 | while IFS= read -r -d $'\0' file; do TO_PROCESS+=("$file"); done
-
-          # Add QtWebEngineProcess if found
           QTWEBENGINEPROCESS_PATH=$(find /usr/lib* "$HOME/qute-venv" -name QtWebEngineProcess -type f -executable -print -quit)
           if [[ -n "$QTWEBENGINEPROCESS_PATH" ]]; then
             echo "Found QtWebEngineProcess at $QTWEBENGINEPROCESS_PATH"
@@ -165,43 +116,30 @@ jobs:
             current_file="${TO_PROCESS[$processed_idx]}"
             processed_idx=$((processed_idx + 1))
 
-            # Skip things that aren't files or are links (we copy actual files with -L)
             if [[ ! -f "$current_file" || -L "$current_file" ]]; then continue; fi
-            # Avoid processing things in the glibc dir itself or already copied libs
             current_basename=$(basename "$current_file")
-            if [[ "$current_file" == "$BUNDLE_DIR/glibc/"* || -v COPIED_LIBS["$current_basename"] ]]; then
-                continue
-            fi
+            if [[ "$current_file" == "$BUNDLE_DIR/glibc/"* || -v COPIED_LIBS["$current_basename"] ]]; then continue; fi
 
             echo "Processing dependencies for: $(basename "$current_file")"
             ldd_output=$(ldd "$current_file" 2>/dev/null || true)
             echo "$ldd_output" | grep -Eo '/[^ ]+\.so(\.[^ ]*)?' | sort -u | while read -r lib_path; do
               lib_basename=$(basename "$lib_path")
-
-              # Skip linux-vdso and empty paths
               if [[ "$lib_basename" == "linux-vdso.so.1" || -z "$lib_basename" ]]; then continue; fi
 
-              # Skip if already copied to usr/lib or glibc
               if [[ -e "$BUNDLE_USR_LIB/$lib_basename" || -e "$BUNDLE_DIR/glibc/$lib_basename" ]]; then
-                  # If it exists in usr/lib but isn't "marked" as copied yet, add it to the queue to check *its* dependencies
                   if [[ ! -v COPIED_LIBS["$lib_basename"] && -e "$BUNDLE_USR_LIB/$lib_basename" ]]; then
                        echo "  -> Queueing already present lib for dependency check: $lib_basename"
                        TO_PROCESS+=("$BUNDLE_USR_LIB/$lib_basename")
-                       COPIED_LIBS["$lib_basename"]=1 # Mark as processed now
-                  # Also mark glibc libs as "copied" conceptually if found
+                       COPIED_LIBS["$lib_basename"]=1
                   elif [[ ! -v COPIED_LIBS["$lib_basename"] && -e "$BUNDLE_DIR/glibc/$lib_basename" ]]; then
                        COPIED_LIBS["$lib_basename"]=1
                   fi
-                  continue # Skip trying to copy it again
+                  continue
               fi
 
-              # Is it a core glibc lib we expect in glibc/?
               is_expected_glibc=0
               for core_lib_pattern in libc\.so libpthread\.so libdl\.so librt\.so libm\.so libgcc_s\.so ld-linux ; do
-                  if [[ "$lib_path" == */"$core_lib_pattern"* ]]; then
-                      is_expected_glibc=1
-                      break
-                  fi
+                  if [[ "$lib_path" == */"$core_lib_pattern"* ]]; then is_expected_glibc=1; break; fi
               done
               if [[ $is_expected_glibc -eq 1 ]]; then
                    echo "  Skipping expected glibc lib: $lib_path (should be in glibc/ dir)"
@@ -209,58 +147,49 @@ jobs:
                    continue
               fi
 
-              # Copy the library if it exists and is a file
               if [ -f "$lib_path" ]; then
                   echo "  Copying: $lib_path -> $BUNDLE_USR_LIB/"
-                  cp -vL "$lib_path" "$BUNDLE_USR_LIB/" # Use -L to copy the actual file
+                  cp -vL "$lib_path" "$BUNDLE_USR_LIB/"
                   if [ -f "$BUNDLE_USR_LIB/$lib_basename" ]; then
-                     COPIED_LIBS["$lib_basename"]=1 # Mark as copied
-                     TO_PROCESS+=("$BUNDLE_USR_LIB/$lib_basename") # Add the *copied* library for dependency check
+                     COPIED_LIBS["$lib_basename"]=1
+                     TO_PROCESS+=("$BUNDLE_USR_LIB/$lib_basename")
                   else
                       echo "  ERROR: Failed to copy $lib_path to $BUNDLE_USR_LIB/"
                   fi
               else
-                  if [[ "$lib_path" != *"ld-linux"* ]]; then # Don't warn for the loader itself
+                  if [[ "$lib_path" != *"ld-linux"* ]]; then
                      echo "  Warning: Dependency not found or not a file: $lib_path (needed by $current_file)"
                   fi
               fi
-            done # end reading ldd output for one file
-          done # end while loop processing files
-
+            done
+          done
           echo "Dependency processing complete. Processed unique libraries: ${#COPIED_LIBS[@]}"
           echo "Final count in $BUNDLE_USR_LIB:"
           ls -1 "$BUNDLE_USR_LIB" | wc -l
 
-      # Indent level 3 (6 spaces)
       - name: Bundle Qt Resources (Adjust paths if needed)
-        # Indent level 4 (8 spaces)
         run: |
           . $HOME/qute-venv/bin/activate
-          # Find Qt installation paths used by PyQt more robustly
           QT_PLUGIN_PATH=$(python3.10 -c "from PyQt5.QtCore import QLibraryInfo; print(QLibraryInfo.location(QLibraryInfo.PluginsPath))")
           QT_TRANSLATIONS_PATH=$(python3.10 -c "from PyQt5.QtCore import QLibraryInfo; print(QLibraryInfo.location(QLibraryInfo.TranslationsPath))")
           QT_DATA_PATH=$(python3.10 -c "from PyQt5.QtCore import QLibraryInfo; print(QLibraryInfo.location(QLibraryInfo.DataPath))")
-          QT_LIBS_PATH=$(python3.10 -c "from PyQt5.QtCore import QLibraryInfo; print(QLibraryInfo.location(QLibraryInfo.LibrariesPath))") # Often contains qt.conf
+          QT_LIBS_PATH=$(python3.10 -c "from PyQt5.QtCore import QLibraryInfo; print(QLibraryInfo.location(QLibraryInfo.LibrariesPath))")
 
           echo "Qt Plugin Path: $QT_PLUGIN_PATH"
           echo "Qt Translations Path: $QT_TRANSLATIONS_PATH"
           echo "Qt Data Path: $QT_DATA_PATH"
           echo "Qt Libs Path: $QT_LIBS_PATH"
 
-          # Copy essential plugins
           if [ -d "$QT_PLUGIN_PATH" ]; then
             mkdir -p "$BUNDLE_DIR/qt5/plugins"
-            # Copy platforms and imageformats forcefully if they exist
             if [ -d "$QT_PLUGIN_PATH/platforms" ]; then cp -a "$QT_PLUGIN_PATH/platforms" "$BUNDLE_DIR/qt5/plugins/"; else echo "Warning: No platforms plugins found at $QT_PLUGIN_PATH/platforms"; fi
             if [ -d "$QT_PLUGIN_PATH/imageformats" ]; then cp -a "$QT_PLUGIN_PATH/imageformats" "$BUNDLE_DIR/qt5/plugins/"; else echo "Warning: No imageformats plugins found at $QT_PLUGIN_PATH/imageformats"; fi
-            # Copy others optionally
             [ -d "$QT_PLUGIN_PATH/xcbglintegrations" ] && cp -a "$QT_PLUGIN_PATH/xcbglintegrations" "$BUNDLE_DIR/qt5/plugins/"
             [ -d "$QT_PLUGIN_PATH/printsupport" ] && cp -a "$QT_PLUGIN_PATH/printsupport" "$BUNDLE_DIR/qt5/plugins/"
           else
             echo "Warning: Qt Plugin Path '$QT_PLUGIN_PATH' not found."
           fi
 
-          # Copy Qt translations
           if [ -d "$QT_TRANSLATIONS_PATH" ]; then
             mkdir -p "$BUNDLE_DIR/qt5/translations"
             cp -a "$QT_TRANSLATIONS_PATH"/* "$BUNDLE_DIR/qt5/translations/" || echo "Warning: Failed to copy Qt translations from $QT_TRANSLATIONS_PATH"
@@ -268,31 +197,20 @@ jobs:
              echo "Warning: Qt Translations Path '$QT_TRANSLATIONS_PATH' not found."
           fi
 
-          # Copy QtWebEngine resources (locales, .pak files) - Critical!
           QTWEBENGINE_RESOURCES_PATH=""
-          # Try finding based on PyQtWebEngine location first
           PYQTWEBENGINE_PATH=$(python3.10 -c "import PyQt5.QtWebEngineWidgets; print(PyQt5.QtWebEngineWidgets.__file__)")
           if [ -n "$PYQTWEBENGINE_PATH" ]; then
-             PYQT_DIR=$(dirname "$(dirname "$PYQTWEBENGINE_PATH")") # Go up two levels from __init__.py or similar
-             if [ -d "$PYQT_DIR/Qt/resources" ]; then
-                QTWEBENGINE_RESOURCES_PATH="$PYQT_DIR/Qt/resources"
-             elif [ -d "$PYQT_DIR/QtWebEngineProcess.app/Contents/Resources" ]; then # Mac-like structure sometimes seen
-                QTWEBENGINE_RESOURCES_PATH="$PYQT_DIR/QtWebEngineProcess.app/Contents/Resources"
-             fi
+             PYQT_DIR=$(dirname "$(dirname "$PYQTWEBENGINE_PATH")")
+             if [ -d "$PYQT_DIR/Qt/resources" ]; then QTWEBENGINE_RESOURCES_PATH="$PYQT_DIR/Qt/resources";
+             elif [ -d "$PYQT_DIR/QtWebEngineProcess.app/Contents/Resources" ]; then QTWEBENGINE_RESOURCES_PATH="$PYQT_DIR/QtWebEngineProcess.app/Contents/Resources"; fi
           fi
-          # Fallback using QLibraryInfo DataPath
-          if [ -z "$QTWEBENGINE_RESOURCES_PATH" ] && [ -d "$QT_DATA_PATH" ] && [ -n "$(find "$QT_DATA_PATH" -maxdepth 1 -name '*resources*.pak' -print -quit)" ]; then
-             QTWEBENGINE_RESOURCES_PATH="$QT_DATA_PATH"
-          fi
-           # Fallback searching system paths near libQt5WebEngineCore
+          if [ -z "$QTWEBENGINE_RESOURCES_PATH" ] && [ -d "$QT_DATA_PATH" ] && [ -n "$(find "$QT_DATA_PATH" -maxdepth 1 -name '*resources*.pak' -print -quit)" ]; then QTWEBENGINE_RESOURCES_PATH="$QT_DATA_PATH"; fi
           if [ -z "$QTWEBENGINE_RESOURCES_PATH" ]; then
               CORE_LIB_PATH=$(find "$BUNDLE_USR_LIB" /usr/lib* -name "libQt5WebEngineCore.so*" -print -quit || true)
               if [ -n "$CORE_LIB_PATH" ]; then
-                  CORE_LIB_DIR=$(dirname "$CORE_LIB_PATH")
-                  if [ -d "$CORE_LIB_DIR/resources" ]; then QTWEBENGINE_RESOURCES_PATH="$CORE_LIB_DIR/resources"; fi
+                  CORE_LIB_DIR=$(dirname "$CORE_LIB_PATH"); if [ -d "$CORE_LIB_DIR/resources" ]; then QTWEBENGINE_RESOURCES_PATH="$CORE_LIB_DIR/resources"; fi
               fi
           fi
-          # Last resort: standard system location for package files
           if [ -z "$QTWEBENGINE_RESOURCES_PATH" ]; then
               STANDARD_RESOURCE_PATH=$(find /usr/lib*/qt5/resources /usr/share/qt5/resources -maxdepth 1 -name "*resources*.pak" -printf '%h\n' -quit || true)
               if [ -n "$STANDARD_RESOURCE_PATH" ]; then QTWEBENGINE_RESOURCES_PATH="$STANDARD_RESOURCE_PATH"; fi
@@ -302,24 +220,16 @@ jobs:
             echo "Found QtWebEngine resources at: $QTWEBENGINE_RESOURCES_PATH"
             mkdir -p "$BUNDLE_DIR/qt5/resources"
             cp -a "$QTWEBENGINE_RESOURCES_PATH"/* "$BUNDLE_DIR/qt5/resources/" || echo "Warning: Failed to copy QtWebEngine resources"
-            # Check locales subdir explicitly
             QTWEBENGINE_LOCALES_PATH="${QTWEBENGINE_RESOURCES_PATH}/locales"
             if [ -d "$QTWEBENGINE_LOCALES_PATH" ] && [ ! -d "$BUNDLE_DIR/qt5/resources/locales" ]; then
                echo "Copying locales subdirectory specifically..."
-               mkdir -p "$BUNDLE_DIR/qt5/resources/locales"
-               cp -a "$QTWEBENGINE_LOCALES_PATH"/* "$BUNDLE_DIR/qt5/resources/locales/" || echo "Warning: Failed to copy QtWebEngine locales subdir"
+               mkdir -p "$BUNDLE_DIR/qt5/resources/locales"; cp -a "$QTWEBENGINE_LOCALES_PATH"/* "$BUNDLE_DIR/qt5/resources/locales/" || echo "Warning: Failed to copy QtWebEngine locales subdir"
             fi
           else
-            echo "--------------------------------------------------------------------"
-            echo " MAJOR WARNING: Could not reliably find QtWebEngine resources dir."
-            echo " Searched PyQt location, QLibraryInfo, system paths. WebEngine WILL LIKELY FAIL."
-            echo " You may need to manually investigate where these are installed."
-            echo " Try: python3 -m pip show PyQtWebEngine | grep Location && find <location> -name '*resources*'"
-            echo "--------------------------------------------------------------------"
-            mkdir -p "$BUNDLE_DIR/qt5/resources/locales" # Create empty dirs anyway
+            echo "--------------------------------------------------------------------"; echo " MAJOR WARNING: Could not reliably find QtWebEngine resources dir."; echo " Searched PyQt location, QLibraryInfo, system paths. WebEngine WILL LIKELY FAIL."; echo " You may need to manually investigate where these are installed."; echo " Try: python3 -m pip show PyQtWebEngine | grep Location && find <location> -name '*resources*'"; echo "--------------------------------------------------------------------"
+            mkdir -p "$BUNDLE_DIR/qt5/resources/locales"
           fi
 
-          # Create qt.conf pointing relatively within the bundle
           echo "Creating qt.conf in $BUNDLE_DIR/usr/bin/"
           cat > "$BUNDLE_DIR/usr/bin/qt.conf" <<EOF
 [Paths]
@@ -331,136 +241,82 @@ Resources = ../qt5/resources
 EOF
           chmod +r "$BUNDLE_DIR/usr/bin/qt.conf"
 
-      # Indent level 3 (6 spaces)
       - name: Patch ELF files (Interpreter and RUNPATH)
-        # Indent level 4 (8 spaces)
         run: |
           LD_SO_NAME=$(basename "$BUNDLE_DIR/glibc"/ld-*.so.?)
           if [ -z "$LD_SO_NAME" ]; then echo "ERROR: Bundled ld.so not found in glibc dir!"; exit 1; fi
           echo "Using dynamic linker: $LD_SO_NAME from $BUNDLE_DIR/glibc"
           BUNDLED_INTERP="$BUNDLE_DIR/glibc/$LD_SO_NAME"
-          # RPATH needs $ORIGIN to be literal, use single quotes in shell command
           EXE_RPATH='$ORIGIN/../lib:$ORIGIN/../../glibc'
           LIB_RPATH='$ORIGIN:$ORIGIN/../glibc'
-          SITE_PKG_RPATH='$ORIGIN/../../../lib:$ORIGIN/../../../glibc' # Relative to site-packages dir
+          SITE_PKG_RPATH='$ORIGIN/../../../lib:$ORIGIN/../../../glibc'
 
-          # --- Patch Executables ---
           for exe_file in "$BUNDLE_DIR/usr/bin/python3" "$BUNDLE_DIR/usr/bin/QtWebEngineProcess"; do
             if [ -f "$exe_file" ]; then
               echo "Patching Interpreter for: $(basename "$exe_file")"
               patchelf --set-interpreter "$BUNDLED_INTERP" "$exe_file" || echo "WARN: Failed to set interpreter for $(basename "$exe_file")"
               echo "Setting RUNPATH for: $(basename "$exe_file") to $EXE_RPATH"
               patchelf --force-rpath --set-rpath "$EXE_RPATH" "$exe_file" || echo "WARN: Failed to set RPATH for $(basename "$exe_file")"
-              echo "Verifier for $(basename "$exe_file"):"
-              readelf -d "$exe_file" | grep -E 'interpreter|RUNPATH' || echo " (No interpreter/RUNPATH found)"
+              echo "Verifier for $(basename "$exe_file"):"; readelf -d "$exe_file" | grep -E 'interpreter|RUNPATH' || echo " (No interpreter/RUNPATH found)"
             fi
           done
 
-          # --- Patch Libraries in usr/lib ---
           echo "Patching libraries in $BUNDLE_USR_LIB"
           find "$BUNDLE_USR_LIB" -maxdepth 1 -type f \( -name '*.so' -o -name '*.so.*' \) -print -exec patchelf --force-rpath --set-rpath "$LIB_RPATH" {} \;
-
-          # --- Patch Libraries deep in site-packages ---
           echo "Patching libraries in $BUNDLE_DIR/usr/lib/python3.10/site-packages"
           find "$BUNDLE_DIR/usr/lib/python3.10/site-packages" -type f \( -name '*.so' -o -name '*.so.*' \) -print -exec patchelf --force-rpath --set-rpath "$SITE_PKG_RPATH" {} \;
-
           echo "Patching complete."
 
-      # Indent level 3 (6 spaces)
       - name: Create launcher script
-        # Indent level 4 (8 spaces)
         run: |
-          # Launcher script needs to set environment and execute python via bundled loader
           cat > "$BUNDLE_DIR/usr/bin/qutebrowser.sh" <<'EOF'
           #!/bin/bash
-          # Determine script's directory and bundle root robustly
           SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
           BUNDLE_ROOT="$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)"
-
-          # Set environment variables
-          export PYTHONHOME="$BUNDLE_ROOT/usr" # Tells python where to find stdlib 'lib' dir
+          export PYTHONHOME="$BUNDLE_ROOT/usr"
           export QT_PLUGIN_PATH="$BUNDLE_ROOT/qt5/plugins"
           export QT_QPA_PLATFORM_PLUGIN_PATH="$BUNDLE_ROOT/qt5/plugins/platforms"
-          export QTCONF_PATH="$SCRIPT_DIR/qt.conf" # Tell Qt where qt.conf is
-
-          # Find the bundled dynamic linker dynamically
+          export QTCONF_PATH="$SCRIPT_DIR/qt.conf"
           LD_SO_NAME=$(basename "$BUNDLE_ROOT/glibc"/ld-*.so.?)
           LD_SO="$BUNDLE_ROOT/glibc/$LD_SO_NAME"
-          LD_LIBRARY_PATH_ARG="$BUNDLE_ROOT/usr/lib:$BUNDLE_ROOT/glibc" # Paths for the loader to search
-
-          # Debugging output (optional)
-          echo "--- Launching qutebrowser ---"
-          echo "BUNDLE_ROOT: $BUNDLE_ROOT"
-          echo "PYTHONHOME: $PYTHONHOME"
-          echo "QT_PLUGIN_PATH: $QT_PLUGIN_PATH"
-          echo "QTCONF_PATH: $QTCONF_PATH"
-          echo "LD_SO: $LD_SO"
-          echo "LD_LIBRARY_PATH_ARG: $LD_LIBRARY_PATH_ARG"
-          echo "PYTHON BIN: $SCRIPT_DIR/python3"
-          echo "ARGS: -m qutebrowser $@"
-          echo "-----------------------------"
-
-          # Execute Python using the bundled dynamic linker and library path
-          # exec replaces the shell script process with the launched process
+          LD_LIBRARY_PATH_ARG="$BUNDLE_ROOT/usr/lib:$BUNDLE_ROOT/glibc"
+          echo "--- Launching qutebrowser ---"; echo "BUNDLE_ROOT: $BUNDLE_ROOT"; echo "PYTHONHOME: $PYTHONHOME"; echo "QT_PLUGIN_PATH: $QT_PLUGIN_PATH"; echo "QTCONF_PATH: $QTCONF_PATH"; echo "LD_SO: $LD_SO"; echo "LD_LIBRARY_PATH_ARG: $LD_LIBRARY_PATH_ARG"; echo "PYTHON BIN: $SCRIPT_DIR/python3"; echo "ARGS: -m qutebrowser $@"; echo "-----------------------------"
           exec "$LD_SO" --library-path "$LD_LIBRARY_PATH_ARG" "$SCRIPT_DIR/python3" -m qutebrowser "$@"
-
-          # This part is only reached if exec fails
-          echo "Error: Failed to execute qutebrowser via $LD_SO" >&2
-          exit 1
+          echo "Error: Failed to execute qutebrowser via $LD_SO" >&2; exit 1
 EOF
           chmod +x "$BUNDLE_DIR/usr/bin/qutebrowser.sh"
-
-          # Create a simple symlink named 'qutebrowser' for convenience
-          # Using relative symlink (-r) is often better for portability
           ln -sfr "$BUNDLE_DIR/usr/bin/qutebrowser.sh" "$BUNDLE_DIR/usr/bin/qutebrowser"
 
-      # Indent level 3 (6 spaces)
       - name: Final bundle check
-        # Indent level 4 (8 spaces)
         run: |
-          echo "--- Bundle Contents (Top Level) ---"
-          ls -l "$BUNDLE_DIR"
-          echo "--- Bundle Contents (usr/bin) ---"
-          ls -l "$BUNDLE_DIR/usr/bin"
-          echo "--- Bundle Sizes ---"
-          du -sh "$BUNDLE_DIR"/*
-          echo "--- Linker Info for python3 ---"
-          readelf -d "$BUNDLE_DIR/usr/bin/python3" | grep -E 'interpreter|RUNPATH' || true
+          echo "--- Bundle Contents (Top Level) ---"; ls -l "$BUNDLE_DIR"
+          echo "--- Bundle Contents (usr/bin) ---"; ls -l "$BUNDLE_DIR/usr/bin"
+          echo "--- Bundle Sizes ---"; du -sh "$BUNDLE_DIR"/*
+          echo "--- Linker Info for python3 ---"; readelf -d "$BUNDLE_DIR/usr/bin/python3" | grep -E 'interpreter|RUNPATH' || true
           echo "--- Linker Info for a PyQt5 Core lib ---"
           PYQT_CORE_SO=$(find "$BUNDLE_DIR/usr/lib/python3.10/site-packages/PyQt5" -name QtCore.so -print -quit || true)
           if [ -n "$PYQT_CORE_SO" ]; then readelf -d "$PYQT_CORE_SO" | grep 'RUNPATH' || true; fi
           echo "--- Linker Info for libQt5Core ---"
-          # Find .so specifically, not .so.X links which might confuse readelf
-          QT_CORE_SO=$(find "$BUNDLE_DIR/usr/lib" -maxdepth 1 -name libQt5Core.so -print -quit || true) 
+          QT_CORE_SO=$(find "$BUNDLE_DIR/usr/lib" -maxdepth 1 -name libQt5Core.so -print -quit || true)
           if [ -n "$QT_CORE_SO" ]; then readelf -d "$QT_CORE_SO" | grep 'RUNPATH' || true; fi
-          echo "--- Checking Qt Conf ---"
-          cat "$BUNDLE_DIR/usr/bin/qt.conf" || true
+          echo "--- Checking Qt Conf ---"; cat "$BUNDLE_DIR/usr/bin/qt.conf" || true
           echo "---------------------"
 
-      # Indent level 3 (6 spaces)
       - name: Create .tar.gz archive
-        # Indent level 4 (8 spaces)
         run: |
-          # Create archive from the $HOME directory to get 'qutebrowser-bundle' at the top level
           tar -czvf $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz -C $HOME qutebrowser-bundle
 
-      # Indent level 3 (6 spaces)
       - name: Generate SHA256 checksum
-        # Indent level 4 (8 spaces)
         run: |
           sha256sum $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz > $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz.sha256
           cat $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz.sha256
 
-      # Indent level 3 (6 spaces) - List item marker '-'
+      # SIMPLIFIED Upload artifact step - Test this structure carefully
       - name: Upload artifact
-        # Indent level 4 (8 spaces) - Keys for this list item
         uses: actions/upload-artifact@v4
-        # Indent level 4 (8 spaces)
         with:
-          # Indent level 5 (10 spaces) - Keys under 'with'
           name: qutebrowser-portable
-          # Indent level 5 (10 spaces)
-          # Use a simple string with newline escape instead of literal block
-          path: "${{ github.workspace }}/qutebrowser-portable.tar.gz\n${{ github.workspace }}/qutebrowser-portable.tar.gz.sha256"
-          # Indent level 5 (10 spaces) - Sibling key to 'name' and 'path'
-          if-no-files-found: error # This corresponds to the previous error line 325
+          # Test with ONLY ONE path first to isolate the issue
+          path: ${{ github.workspace }}/qutebrowser-portable.tar.gz
+          # Ensure this line (prev line 325) has EXACTLY 10 spaces indent
+          if-no-files-found: error
