@@ -148,7 +148,7 @@ jobs:
               return 1;
           }
           EOF
-          gcc -O2 -Wall -static -static-libgcc -o $HOME/qutebrowser-bundle/usr/bin/qutebrowser $HOME/qutebrowser-bundle/usr/bin/launcher.c
+          gcc -O2 -Wall -o $HOME/qutebrowser-bundle/usr/bin/qutebrowser $HOME/qutebrowser-bundle/usr/bin/launcher.c
           chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
           rm $HOME/qutebrowser-bundle/usr/bin/launcher.c
 
