@@ -452,17 +452,15 @@ EOF
           cat $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz.sha256
 
       # Indent level 3 (6 spaces) - List item marker '-'
-      - name: Upload artifact # Line ~292
+      - name: Upload artifact
         # Indent level 4 (8 spaces) - Keys for this list item
-        uses: actions/upload-artifact@v4 # Line ~293
+        uses: actions/upload-artifact@v4
         # Indent level 4 (8 spaces)
-        with: # Line ~294
+        with:
           # Indent level 5 (10 spaces) - Keys under 'with'
-          name: qutebrowser-portable # Line ~295 <- ERROR WAS HERE (Line 296 previously)
+          name: qutebrowser-portable
           # Indent level 5 (10 spaces)
-          path: | # Line ~296
-            # Indent level 6 (12 spaces) - Lines for the literal block scalar
-            ${{ github.workspace }}/qutebrowser-portable.tar.gz # Line ~297
-            ${{ github.workspace }}/qutebrowser-portable.tar.gz.sha256 # Line ~298
+          # Use a simple string with newline escape instead of literal block
+          path: "${{ github.workspace }}/qutebrowser-portable.tar.gz\n${{ github.workspace }}/qutebrowser-portable.tar.gz.sha256"
           # Indent level 5 (10 spaces) - Sibling key to 'name' and 'path'
-          if-no-files-found: error # Line ~299
+          if-no-files-found: error # This corresponds to the previous error line 325
