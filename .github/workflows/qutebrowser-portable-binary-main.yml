@@ -107,8 +107,8 @@ jobs:
         run: |
           cat > "$HOME/qutebrowser-bundle/usr/bin/qutebrowser" <<'EOF'
           #!/bin/bash
-          DIR="$(dirname "$(readlink -f "$0")")"
-          BASE_DIR="$(dirname "$DIR")"
+          DIR="$(dirname "$(readlink -f "$0")")"  # e.g., /path/to/qutebrowser-bundle/usr/bin
+          BASE_DIR="$(dirname "$(dirname "$DIR")")"  # e.g., /path/to/qutebrowser-bundle
           export LD_LIBRARY_PATH="$BASE_DIR/lib:$LD_LIBRARY_PATH"
           export PYTHONHOME="$BASE_DIR"
           export PYTHONPATH="$BASE_DIR/lib/python3.10/site-packages"
