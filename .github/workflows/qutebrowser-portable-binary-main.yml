@@ -93,6 +93,9 @@ jobs:
               cp -v "$lib" "$ldpath/"
             done
           '
+          # Verify linker exists and is executable
+          [ -f "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" ] || { echo "Error: ld-linux-x86-64.so.2 not found"; exit 1; }
+          [ -x "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" ] || { echo "Error: ld-linux-x86-64.so.2 not executable"; chmod +x "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" || exit 1; }
 
       - name: Check glibc files
         run: |
@@ -105,16 +108,21 @@ jobs:
           cat > "$HOME/qutebrowser-bundle/usr/bin/qutebrowser" <<'EOF'
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "$0")")"
-          export LD_LIBRARY_PATH="$DIR/../lib:$LD_LIBRARY_PATH"
-          export PYTHONHOME="$DIR/.."
-          export PYTHONPATH="$DIR/../lib/python3.10/site-packages"
-          exec "$DIR/../glibc/ld-linux-x86-64.so.2" --library-path "$DIR/../lib" "$DIR/python3" -m qutebrowser "$@"
+          BASE_DIR="$(dirname "$DIR")"
+          export LD_LIBRARY_PATH="$BASE_DIR/lib:$LD_LIBRARY_PATH"
+          export PYTHONHOME="$BASE_DIR"
+          export PYTHONPATH="$BASE_DIR/lib/python3.10/site-packages"
+          LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
+          [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
+          exec "$LINKER" --library-path "$BASE_DIR/lib" "$DIR/python3" -m qutebrowser "$@"
           EOF
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
 
       - name: Verify bundle contents
         run: |
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/"
+          ls -lh "$HOME/qutebrowser-bundle/usr/bin/"
+          ls -lh "$HOME/qutebrowser-bundle/glibc/"
           du -sh "$HOME/qutebrowser-bundle/"* || true
           find "$HOME/qutebrowser-bundle" | wc -l || true
 
