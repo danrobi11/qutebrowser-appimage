@@ -109,12 +109,12 @@ jobs:
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "$0")")"  # e.g., /path/to/qutebrowser-bundle/usr/bin
           BASE_DIR="$(dirname "$(dirname "$DIR")")"  # e.g., /path/to/qutebrowser-bundle
-          export LD_LIBRARY_PATH="$BASE_DIR/lib:$LD_LIBRARY_PATH"
+          export LD_LIBRARY_PATH="$BASE_DIR/lib:$BASE_DIR/glibc:$LD_LIBRARY_PATH"
           export PYTHONHOME="$BASE_DIR"
           export PYTHONPATH="$BASE_DIR/lib/python3.10/site-packages"
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
           [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
-          exec "$LINKER" --library-path "$BASE_DIR/lib" "$DIR/python3" -m qutebrowser "$@"
+          exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/lib" "$DIR/python3" -m qutebrowser "$@"
           EOF
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
 
