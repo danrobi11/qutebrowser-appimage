@@ -41,7 +41,6 @@ jobs:
           echo "Detecting user site-packages location..."
           SITEPKG="$(python3.10 -c 'import site; print(site.getusersitepackages())')"
           echo "Found: $SITEPKG"
-
           mkdir -p "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages"
           cp -rv "$SITEPKG"/* "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages"
 
@@ -54,7 +53,6 @@ jobs:
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share/applications,lib/python3.10}
           mkdir -p $HOME/qutebrowser-bundle/glibc
-
           cp "$(which python3.10)" $HOME/qutebrowser-bundle/usr/bin/python3
           chmod +x $HOME/qutebrowser-bundle/usr/bin/python3
 
@@ -62,17 +60,13 @@ jobs:
         run: |
           patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" \
             $HOME/qutebrowser-bundle/usr/bin/python3
-
           ldd "$(which python3.10)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
             cp -v "$lib" $HOME/qutebrowser-bundle/usr/lib/
           done
-
           find /usr/lib -name "libpython3.10.so*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
           find /usr/lib -name "libffi.so.8*" -exec cp -v {} $HOME/qutebrowser-bundle/usr/lib/ \;
-
           cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* $HOME/qutebrowser-bundle/usr/lib/
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 $HOME/qutebrowser-bundle/usr/lib/
-
           stdlib_dir=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
           cp -r "$stdlib_dir"/* $HOME/qutebrowser-bundle/usr/lib/python3.10/
 
@@ -87,14 +81,11 @@ jobs:
             apt update && apt install -y libc6
             ldpath="/mnt/qutebrowser-bundle/glibc"
             mkdir -p "$ldpath"
-
             cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$ldpath/"
-
             ldd /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 | awk '"'"'{print $3}'"'"' | grep "^/" | while read lib; do
               cp -v "$lib" "$ldpath/"
             done
           '
-
           cp -v $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2 $HOME/qutebrowser-bundle/glibc/ld-linker
           mv $HOME/qutebrowser-bundle/glibc/ld-linker $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
           chmod +x $HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2
@@ -114,7 +105,6 @@ jobs:
           #include <limits.h>
           #include <unistd.h>
           #include <string.h>
-
           int main(int argc, char **argv) {
               char exe_path[PATH_MAX];
               ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path)-1);
@@ -123,32 +113,24 @@ jobs:
                   return 1;
               }
               exe_path[len] = '\0';
-
               char exe_path_copy[PATH_MAX];
               strncpy(exe_path_copy, exe_path, sizeof(exe_path_copy));
               exe_path_copy[sizeof(exe_path_copy)-1] = '\0';
               char *dir = dirname(exe_path_copy);
-
               char python_path[PATH_MAX];
               snprintf(python_path, sizeof(python_path), "%s/python3", dir);
-
               char pythonhome[PATH_MAX];
               snprintf(pythonhome, sizeof(pythonhome), "%s/..", dir);
-
               char pythonpath[PATH_MAX];
               snprintf(pythonpath, sizeof(pythonpath), "%s/../lib/python3.10/site-packages", dir);
-
               char ld_path[PATH_MAX];
               snprintf(ld_path, sizeof(ld_path), "%s/../glibc/ld-linux-x86-64.so.2", dir);
-
               char lib_path[PATH_MAX];
               snprintf(lib_path, sizeof(lib_path), "%s/../lib", dir);
-
               // Set up library path
               setenv("LD_LIBRARY_PATH", lib_path, 1);
               setenv("PYTHONHOME", pythonhome, 1);
               setenv("PYTHONPATH", pythonpath, 1);
-
               char *ld_args[argc + 7];
               int i = 0;
               ld_args[i++] = ld_path;
@@ -161,13 +143,11 @@ jobs:
                   ld_args[i++] = argv[j];
               }
               ld_args[i] = NULL;
-
               execv(ld_path, ld_args);
               perror("execv failed");
               return 1;
           }
           EOF
-
           gcc -O2 -Wall -static -static-libgcc -o $HOME/qutebrowser-bundle/usr/bin/qutebrowser $HOME/qutebrowser-bundle/usr/bin/launcher.c
           chmod +x $HOME/qutebrowser-bundle/usr/bin/qutebrowser
           rm $HOME/qutebrowser-bundle/usr/bin/launcher.c
@@ -177,10 +157,23 @@ jobs:
           du -sh $HOME/qutebrowser-bundle/* || true
           find $HOME/qutebrowser-bundle | wc -l || true
 
+      - name: Ensure RPATH with patchelf
+        run: |
+          echo "Before patchelf:"
+          readelf -d $HOME/qutebrowser-bundle/usr/bin/qutebrowser | grep RPATH || echo "No RPATH set initially"
+          sudo patchelf --force-rpath --set-rpath \$ORIGIN/../lib $HOME/qutebrowser-bundle/usr/bin/qutebrowser || { echo "Patchelf failed"; exit 1; }
+          echo "After patchelf:"
+          readelf -d $HOME/qutebrowser-bundle/usr/bin/qutebrowser | grep RPATH || { echo "RPATH not set after patchelf"; exit 1; }
+
       - name: Create .tar.gz archive
         run: |
           cd $HOME
           tar -czvf $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz qutebrowser-bundle
+
+      - name: Generate SHA256 checksum
+        run: |
+          sha256sum $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz > $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz.sha256
+          cat $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz.sha256
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
