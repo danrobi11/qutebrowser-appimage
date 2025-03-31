@@ -26,6 +26,8 @@ jobs:
             libqt5webenginecore5 \
             libqt5webenginewidgets5 \
             libqt5widgets5 \
+            libqt5gui5 \
+            libqt5core5a \
             build-essential \
             patchelf \
             gcc \
@@ -38,42 +40,46 @@ jobs:
 
       - name: Copy installed site-packages to bundle
         run: |
-          echo "Detecting user site-packages location..."
           SITEPKG="$(python3.10 -c 'import site; print(site.getusersitepackages())')"
-          echo "Found: $SITEPKG"
+          echo "Site-packages: $SITEPKG"
           mkdir -p "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages"
           cp -rv "$SITEPKG"/* "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages"
 
-      - name: Check bundled site-packages
+      - name: Bundle Python binary and core libs
         run: |
-          du -sh "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages" || true
-          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages" | wc -l || true
-
-      - name: Bundle Python binary and libs
-        run: |
-          mkdir -p "$HOME/qutebrowser-bundle/usr/bin" "$HOME/qutebrowser-bundle/usr/lib" "$HOME/qutebrowser-bundle/usr/lib/python3.10"
-          mkdir -p "$HOME/qutebrowser-bundle/glibc"
+          mkdir -p "$HOME/qutebrowser-bundle/usr/bin" "$HOME/qutebrowser-bundle/usr/lib" "$HOME/qutebrowser-bundle/usr/lib/python3.10" "$HOME/qutebrowser-bundle/glibc"
           cp "$(which python3.10)" "$HOME/qutebrowser-bundle/usr/bin/python3"
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/python3"
-
-      - name: Patch interpreter and bundle shared libraries
-        run: |
-          patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" \
-            "$HOME/qutebrowser-bundle/usr/bin/python3"
-          ldd "$(which python3.10)" | grep -o '/[^ ]*\.so[^ ]*' | sort -u | while read lib; do
-            cp -v "$lib" "$HOME/qutebrowser-bundle/usr/lib/"
-          done
-          find /usr/lib -name "libpython3.10.so*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
-          find /usr/lib -name "libffi.so.8*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
-          cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* "$HOME/qutebrowser-bundle/usr/lib/"
-          cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 "$HOME/qutebrowser-bundle/usr/lib/"
           stdlib_dir=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
           cp -r "$stdlib_dir"/* "$HOME/qutebrowser-bundle/usr/lib/python3.10/"
 
-      - name: Check Python stdlib
+      - name: Patch interpreter and bundle all shared libraries recursively
         run: |
-          du -sh "$HOME/qutebrowser-bundle/usr/lib/python3.10" || true
-          find "$HOME/qutebrowser-bundle/usr/lib/python3.10" | wc -l || true
+          patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" "$HOME/qutebrowser-bundle/usr/bin/python3"
+          # Function to copy library and its dependencies recursively
+          copy_deps() {
+            local lib="$1"
+            local dest="$2"
+            [ ! -f "$lib" ] && return
+            cp -v "$lib" "$dest/"
+            ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+              if [ -f "$dep" ] && [ ! -f "$dest/$(basename "$dep")" ]; then
+                copy_deps "$dep" "$dest"
+              fi
+            done
+          }
+          # Bundle Python dependencies
+          ldd "$(which python3.10)" | grep -o '/[^ ]*\.so[^ ]*' | while read lib; do
+            copy_deps "$lib" "$HOME/qutebrowser-bundle/usr/lib"
+          done
+          # Bundle Qt and PyQt dependencies
+          for lib in libQt5Core libQt5Gui libQt5Widgets libQt5WebEngineCore libQt5WebEngineWidgets; do
+            find /usr/lib -name "${lib}.so*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
+          done
+          # Additional critical libs
+          cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* "$HOME/qutebrowser-bundle/usr/lib/"
+          cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 "$HOME/qutebrowser-bundle/usr/lib/"
+          cp -v /usr/lib/x86_64-linux-gnu/libpthread.so.0 "$HOME/qutebrowser-bundle/usr/lib/"
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -86,91 +92,25 @@ jobs:
               cp -v "$lib" "$ldpath/"
             done
           '
-          cp -v "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" "$HOME/qutebrowser-bundle/glibc/ld-linker"
-          mv "$HOME/qutebrowser-bundle/glibc/ld-linker" "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2"
           chmod +x "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2"
 
-      - name: Check glibc files
+      - name: Write shell launcher
         run: |
-          du -sh "$HOME/qutebrowser-bundle/glibc" || true
-          find "$HOME/qutebrowser-bundle/glibc" | wc -l || true
-
-      - name: Write and compile C launcher (fixed)
-        run: |
-          cat > "$HOME/qutebrowser-bundle/usr/bin/launcher.c" <<'EOF'
-          #define _GNU_SOURCE
-          #include <stdio.h>
-          #include <stdlib.h>
-          #include <libgen.h>
-          #include <limits.h>
-          #include <unistd.h>
-          #include <string.h>
-
-          int main(int argc, char **argv) {
-              char exe_path[PATH_MAX];
-              char python_path[PATH_MAX];
-              char pythonhome[PATH_MAX];
-              char pythonpath[PATH_MAX];
-              char ld_path[PATH_MAX];
-              char lib_path[PATH_MAX];
-
-              // Get executable path
-              ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
-              if (len == -1) {
-                  perror("readlink");
-                  return 1;
-              }
-              exe_path[len] = '\0';
-
-              // Construct paths safely
-              char *dir = dirname(exe_path);
-              snprintf(python_path, sizeof(python_path), "%s/python3", dir);
-              snprintf(pythonhome, sizeof(pythonhome), "%s/..", dir);
-              snprintf(pythonpath, sizeof(pythonpath), "%s/../lib/python3.10/site-packages", dir);
-              snprintf(ld_path, sizeof(ld_path), "%s/../glibc/ld-linux-x86-64.so.2", dir);
-              snprintf(lib_path, sizeof(lib_path), "%s/../lib", dir);
-
-              // Set environment variables
-              setenv("LD_LIBRARY_PATH", lib_path, 1);
-              setenv("PYTHONHOME", pythonhome, 1);
-              setenv("PYTHONPATH", pythonpath, 1);
-
-              // Prepare arguments for execv
-              char *ld_args[argc + 7];
-              int i = 0;
-              ld_args[i++] = ld_path;
-              ld_args[i++] = "--library-path";
-              ld_args[i++] = lib_path;
-              ld_args[i++] = python_path;
-              ld_args[i++] = "-m";
-              ld_args[i++] = "qutebrowser";
-              for (int j = 1; j < argc; j++) {
-                  ld_args[i++] = argv[j];
-              }
-              ld_args[i] = NULL;
-
-              // Execute
-              execv(ld_path, ld_args);
-              perror("execv failed");
-              return 1;
-          }
+          cat > "$HOME/qutebrowser-bundle/usr/bin/qutebrowser" <<'EOF'
+          #!/bin/bash
+          DIR="$(dirname "$(readlink -f "$0")")"
+          export LD_LIBRARY_PATH="$DIR/../lib:$LD_LIBRARY_PATH"
+          export PYTHONHOME="$DIR/.."
+          export PYTHONPATH="$DIR/../lib/python3.10/site-packages"
+          exec "$DIR/../glibc/ld-linux-x86-64.so.2" --library-path "$DIR/../lib" "$DIR/python3" -m qutebrowser "$@"
           EOF
-          gcc -g -O0 -Wall -Wextra -o "$HOME/qutebrowser-bundle/usr/bin/qutebrowser" "$HOME/qutebrowser-bundle/usr/bin/launcher.c"
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
-          rm "$HOME/qutebrowser-bundle/usr/bin/launcher.c"
 
-      - name: Final bundle check
+      - name: Verify bundle contents
         run: |
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/"
           du -sh "$HOME/qutebrowser-bundle/"* || true
           find "$HOME/qutebrowser-bundle" | wc -l || true
-
-      - name: Ensure RPATH with patchelf
-        run: |
-          echo "Before patchelf:"
-          readelf -d "$HOME/qutebrowser-bundle/usr/bin/qutebrowser" | grep RPATH || echo "No RPATH set initially"
-          sudo patchelf --force-rpath --set-rpath "\$ORIGIN/../lib" "$HOME/qutebrowser-bundle/usr/bin/qutebrowser" || { echo "Patchelf failed"; exit 1; }
-          echo "After patchelf:"
-          readelf -d "$HOME/qutebrowser-bundle/usr/bin/qutebrowser" | grep RPATH || { echo "RPATH not set after patchelf"; exit 1; }
 
       - name: Create .tar.gz archive
         run: |
