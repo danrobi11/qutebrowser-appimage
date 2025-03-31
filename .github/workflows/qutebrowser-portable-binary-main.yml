@@ -81,6 +81,10 @@ jobs:
           cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /usr/lib/x86_64-linux-gnu/libpthread.so.0 "$HOME/qutebrowser-bundle/usr/lib/"
+          # Patch RPATH for all Qt shared libraries
+          for lib in "$HOME/qutebrowser-bundle/usr/lib/"libQt5*.so*; do
+            patchelf --set-rpath "\$ORIGIN/../glibc:\$ORIGIN" "$lib"
+          done
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
