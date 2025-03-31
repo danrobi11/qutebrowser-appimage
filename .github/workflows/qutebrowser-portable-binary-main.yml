@@ -88,11 +88,17 @@ jobs:
             ldpath="/mnt/qutebrowser-bundle/glibc"
             mkdir -p "$ldpath"
             cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$ldpath/"
+            chmod +x "$ldpath/ld-linux-x86-64.so.2"
             ldd /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 | awk '"'"'{print $3}'"'"' | grep "^/" | while read lib; do
               cp -v "$lib" "$ldpath/"
             done
           '
-          chmod +x "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2"
+
+      - name: Check glibc files
+        run: |
+          ls -lh "$HOME/qutebrowser-bundle/glibc/"
+          du -sh "$HOME/qutebrowser-bundle/glibc" || true
+          find "$HOME/qutebrowser-bundle/glibc" | wc -l || true
 
       - name: Write shell launcher
         run: |
