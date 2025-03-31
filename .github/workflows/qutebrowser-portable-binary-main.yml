@@ -95,7 +95,7 @@ jobs:
           du -sh $HOME/qutebrowser-bundle/glibc || true
           find $HOME/qutebrowser-bundle/glibc | wc -l || true
 
-      - name: Write and compile C launcher (linked against glibc)
+      - name: Write and compile C launcher (dynamic)
         run: |
           cat > $HOME/qutebrowser-bundle/usr/bin/launcher.c <<'EOF'
           #define _GNU_SOURCE
@@ -127,7 +127,6 @@ jobs:
               snprintf(ld_path, sizeof(ld_path), "%s/../glibc/ld-linux-x86-64.so.2", dir);
               char lib_path[PATH_MAX];
               snprintf(lib_path, sizeof(lib_path), "%s/../lib", dir);
-              // Set up library path
               setenv("LD_LIBRARY_PATH", lib_path, 1);
               setenv("PYTHONHOME", pythonhome, 1);
               setenv("PYTHONPATH", pythonpath, 1);
