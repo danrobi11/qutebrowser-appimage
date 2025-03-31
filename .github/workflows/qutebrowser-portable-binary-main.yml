@@ -56,6 +56,7 @@ jobs:
       - name: Patch interpreter and bundle all shared libraries recursively
         run: |
           patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" "$HOME/qutebrowser-bundle/usr/bin/python3"
+          patchelf --set-rpath "\$ORIGIN/../glibc:\$ORIGIN/../lib" "$HOME/qutebrowser-bundle/usr/bin/python3"
           # Function to copy library and its dependencies recursively
           copy_deps() {
             local lib="$1"
