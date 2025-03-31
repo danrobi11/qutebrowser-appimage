@@ -1,21 +1,36 @@
+# Top level keys have no indent
 name: qutebrowser-portable-binary-main
 
+# Top level key
 on:
+  # Indent level 1 (2 spaces)
   push:
+    # Indent level 2 (4 spaces)
     branches: [ main ]
+  # Indent level 1 (2 spaces)
   pull_request:
+    # Indent level 2 (4 spaces)
     branches: [ main ]
+  # Indent level 1 (2 spaces)
   workflow_dispatch:
 
+# Top level key
 jobs:
+  # Indent level 1 (2 spaces)
   build:
+    # Indent level 2 (4 spaces)
     runs-on: ubuntu-22.04
 
+    # Indent level 2 (4 spaces)
     steps:
+      # Indent level 3 (6 spaces) - Start of a list item '-'
       - name: Checkout source
+        # Indent level 4 (8 spaces) - Keys within the list item
         uses: actions/checkout@v4
 
+      # Indent level 3 (6 spaces)
       - name: Install build and runtime dependencies
+        # Indent level 4 (8 spaces)
         run: |
           sudo apt update
           # Using --no-install-recommends to keep the image smaller
@@ -28,20 +43,26 @@ jobs:
             wget \
             libglib2.0-0 # Often needed by Qt/Python libs
 
+      # Indent level 3 (6 spaces)
       - name: Create and activate virtual environment
+        # Indent level 4 (8 spaces)
         run: |
           python3.10 -m venv $HOME/qute-venv
           # Using '. ' which is equivalent to 'source' but more portable
           . $HOME/qute-venv/bin/activate
 
+      # Indent level 3 (6 spaces)
       - name: Install Qutebrowser and PyQt5/WebEngine into venv
+        # Indent level 4 (8 spaces)
         run: |
           . $HOME/qute-venv/bin/activate
           pip install --upgrade pip
           pip install --no-cache-dir qutebrowser pyqt5 pyqtwebengine
           pip show qutebrowser || exit 1
 
+      # Indent level 3 (6 spaces)
       - name: Prepare bundle structure
+        # Indent level 4 (8 spaces)
         run: |
           mkdir -p $HOME/qutebrowser-bundle/usr/{bin,lib,share}
           mkdir -p $HOME/qutebrowser-bundle/qt5 # For Qt resources
@@ -52,7 +73,9 @@ jobs:
           echo "BUNDLE_DIR=$BUNDLE_DIR" >> $GITHUB_ENV
           echo "BUNDLE_USR_LIB=$BUNDLE_USR_LIB" >> $GITHUB_ENV
 
+      # Indent level 3 (6 spaces)
       - name: Bundle Python interpreter and standard library
+        # Indent level 4 (8 spaces)
         run: |
           . $HOME/qute-venv/bin/activate
           # Copy interpreter
@@ -86,7 +109,9 @@ jobs:
             echo "Warning: No site-packages found or directory is empty."
           fi
 
+      # Indent level 3 (6 spaces)
       - name: Bundle Glibc / Dynamic Linker
+        # Indent level 4 (8 spaces)
         run: |
           # Copy the dynamic linker
           LD_SO=$(ldd /bin/ls | grep 'ld-linux' | head -n 1 | awk '{print $1}')
@@ -110,7 +135,9 @@ jobs:
           # Ensure executable permission for the linker
           chmod +x "$BUNDLE_DIR/glibc/$(basename "$LD_SO")"
 
+      # Indent level 3 (6 spaces)
       - name: Recursively find and bundle ALL required shared libraries
+        # Indent level 4 (8 spaces)
         run: |
           . $HOME/qute-venv/bin/activate
           declare -A COPIED_LIBS # Keep track of copied libs basename to avoid duplicates/loops
@@ -204,7 +231,9 @@ jobs:
           echo "Final count in $BUNDLE_USR_LIB:"
           ls -1 "$BUNDLE_USR_LIB" | wc -l
 
+      # Indent level 3 (6 spaces)
       - name: Bundle Qt Resources (Adjust paths if needed)
+        # Indent level 4 (8 spaces)
         run: |
           . $HOME/qute-venv/bin/activate
           # Find Qt installation paths used by PyQt more robustly
@@ -302,7 +331,9 @@ Resources = ../qt5/resources
 EOF
           chmod +r "$BUNDLE_DIR/usr/bin/qt.conf"
 
+      # Indent level 3 (6 spaces)
       - name: Patch ELF files (Interpreter and RUNPATH)
+        # Indent level 4 (8 spaces)
         run: |
           LD_SO_NAME=$(basename "$BUNDLE_DIR/glibc"/ld-*.so.?)
           if [ -z "$LD_SO_NAME" ]; then echo "ERROR: Bundled ld.so not found in glibc dir!"; exit 1; fi
@@ -335,7 +366,9 @@ EOF
 
           echo "Patching complete."
 
+      # Indent level 3 (6 spaces)
       - name: Create launcher script
+        # Indent level 4 (8 spaces)
         run: |
           # Launcher script needs to set environment and execute python via bundled loader
           cat > "$BUNDLE_DIR/usr/bin/qutebrowser.sh" <<'EOF'
@@ -381,7 +414,9 @@ EOF
           # Using relative symlink (-r) is often better for portability
           ln -sfr "$BUNDLE_DIR/usr/bin/qutebrowser.sh" "$BUNDLE_DIR/usr/bin/qutebrowser"
 
+      # Indent level 3 (6 spaces)
       - name: Final bundle check
+        # Indent level 4 (8 spaces)
         run: |
           echo "--- Bundle Contents (Top Level) ---"
           ls -l "$BUNDLE_DIR"
@@ -402,23 +437,32 @@ EOF
           cat "$BUNDLE_DIR/usr/bin/qt.conf" || true
           echo "---------------------"
 
+      # Indent level 3 (6 spaces)
       - name: Create .tar.gz archive
+        # Indent level 4 (8 spaces)
         run: |
           # Create archive from the $HOME directory to get 'qutebrowser-bundle' at the top level
           tar -czvf $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz -C $HOME qutebrowser-bundle
 
+      # Indent level 3 (6 spaces)
       - name: Generate SHA256 checksum
+        # Indent level 4 (8 spaces)
         run: |
           sha256sum $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz > $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz.sha256
           cat $GITHUB_WORKSPACE/qutebrowser-portable.tar.gz.sha256
 
-      # Step where error was reported (around line 300 in previous attempt)
-      # Using standard 2-space list item indent, 4-space key indent, 6-space 'with' key indent
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: qutebrowser-portable
-          path: |
-            ${{ github.workspace }}/qutebrowser-portable.tar.gz
-            ${{ github.workspace }}/qutebrowser-portable.tar.gz.sha256
-          if-no-files-found: error
+      # Indent level 3 (6 spaces) - List item marker '-'
+      - name: Upload artifact # Line ~292
+        # Indent level 4 (8 spaces) - Keys for this list item
+        uses: actions/upload-artifact@v4 # Line ~293
+        # Indent level 4 (8 spaces)
+        with: # Line ~294
+          # Indent level 5 (10 spaces) - Keys under 'with'
+          name: qutebrowser-portable # Line ~295 <- ERROR WAS HERE (Line 296 previously)
+          # Indent level 5 (10 spaces)
+          path: | # Line ~296
+            # Indent level 6 (12 spaces) - Lines for the literal block scalar
+            ${{ github.workspace }}/qutebrowser-portable.tar.gz # Line ~297
+            ${{ github.workspace }}/qutebrowser-portable.tar.gz.sha256 # Line ~298
+          # Indent level 5 (10 spaces) - Sibling key to 'name' and 'path'
+          if-no-files-found: error # Line ~299
