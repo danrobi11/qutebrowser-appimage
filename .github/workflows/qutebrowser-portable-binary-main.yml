@@ -27,27 +27,27 @@ jobs:
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
 
-          # Install base dependencies
+          # Install base dependencies with Qt 6
           RUN apt update && apt install -y \
               python3.10 \
               python3-pip \
               python3-setuptools \
               libffi8 \
-              # Qt and WebEngine core
-              libqt5webenginecore5 \
-              libqt5webenginewidgets5 \
-              libqt5widgets5 \
-              libqt5gui5 \
-              libqt5core5a \
-              libqt5opengl5 \
-              libqt5network5 \
-              libqt5dbus5 \
-              libqt5printsupport5 \
-              libqt5qml5 \
-              libqt5qmlmodels5 \
-              libqt5quick5 \
-              libqt5quickwidgets5 \
-              libqt5webchannel5 \
+              # Qt 6 and WebEngine core
+              libqt6webenginecore6 \
+              libqt6webenginewidgets6 \
+              libqt6widgets6 \
+              libqt6gui6 \
+              libqt6core6 \
+              libqt6opengl6 \
+              libqt6network6 \
+              libqt6dbus6 \
+              libqt6printsupport6 \
+              libqt6qml6 \
+              libqt6qmlmodels6 \
+              libqt6quick6 \
+              libqt6quickwidgets6 \
+              libqt6webchannel6 \
               # Graphics and X11 dependencies
               libgl1 \
               libegl1 \
@@ -97,8 +97,8 @@ jobs:
           RUN python3 -m pip install --no-cache-dir --upgrade pip>=23.0 && \
               python3 -m pip install --no-cache-dir --root-user-action=ignore \
               qutebrowser \
-              pyqt5 \
-              pyqtwebengine \
+              pyqt6 \
+              pyqt6-webengine \
               jinja2 \
               markupsafe \
               pyyaml
@@ -161,13 +161,15 @@ jobs:
           xhost +SI:localuser:$USER
           xhost
 
-          # Load and run the container
+          # Load and run the container with full userspace access
           echo "Loading container image..."
           podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
           echo "Launching qutebrowser..."
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
+            -v $HOME:/home/user \
+            -e HOME=/home/user \
             --userns=keep-id \
             localhost/qutebrowser-x11:latest
           EOF
