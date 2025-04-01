@@ -83,16 +83,19 @@ jobs:
           ldd "$(which python3.10)" | grep -o '/[^ ]*\.so[^ ]*' | while read lib; do
             copy_deps "$lib" "$HOME/qutebrowser-bundle/usr/lib"
           done
-          # Bundle Qt libraries with specific version (5.15.3) for consistency and their dependencies
+          # Bundle Qt libraries with specific versions and symlinks
           for lib in libQt5Core.so.5.15.3 libQt5Gui.so.5.15.3 libQt5Widgets.so.5.15.3 libQt5WebEngineCore.so.5.15.9 libQt5WebEngineWidgets.so.5.15.9 libQt5XcbQpa.so.5.15.3 libQt5DBus.so.5.15.3 libQt5OpenGL.so.5.15.3; do
             find /usr/lib -name "$lib" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
             find /usr/lib -name "$lib" -exec ldd {} \; | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
               copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
             done
-            # Ensure symlink for libQt5OpenGL.so.5 exists
-            if [ "$lib" = "libQt5OpenGL.so.5.15.3" ]; then
-              ln -sfv "$HOME/qutebrowser-bundle/usr/lib/libQt5OpenGL.so.5.15.3" "$HOME/qutebrowser-bundle/usr/lib/libQt5OpenGL.so.5"
-            fi
+            # Ensure symlinks for versioned libraries
+            case "$lib" in
+              libQt5OpenGL.so.5.15.3)
+                ln -sfv "$HOME/qutebrowser-bundle/usr/lib/libQt5OpenGL.so.5.15.3" "$HOME/qutebrowser-bundle/usr/lib/libQt5OpenGL.so.5"
+                ln -sfv "$HOME/qutebrowser-bundle/usr/lib/libQt5OpenGL.so.5.15.3" "$HOME/qutebrowser-bundle/usr/lib/libQt5OpenGL.so"
+                ;;
+            esac
           done
           # Bundle XCB and additional Qt dependencies
           for lib in libxcb-icccm libxcb-image libxcb-keysyms libxcb-render-util libQt5Network.so.5 libQt5Qml.so.5 libQt5Quick.so.5; do
@@ -101,14 +104,14 @@ jobs:
               copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
             done
           done
-          # Bundle additional critical libs with their dependencies
+          # Bundle additional critical libs
           for lib in libgcc_s.so.1 libpthread.so.0 libdouble-conversion.so.3 libz.so.1 libicui18n.so.66 libicuuc.so.66 libicudata.so.66 libglib-2.0.so.0 libpcre2-8.so.0; do
             find /usr/lib /lib -name "$lib*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
             find /usr/lib /lib -name "$lib*" -exec ldd {} \; | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
               copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
             done
           done
-          # Explicitly bundle libstdc++.so.6 from the system (Ubuntu 22.04)
+          # Explicitly bundle libstdc++.so.6
           cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6 "$HOME/qutebrowser-bundle/usr/lib/"
           ldd /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
             copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
@@ -123,13 +126,13 @@ jobs:
               fi
             done
           done
-          # Bundle a statically linked patchelf to avoid runtime issues
+          # Bundle static patchelf
           wget -O "$HOME/patchelf-static" "https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz"
           tar -xvf "$HOME/patchelf-static" -C "$HOME"
           cp -v "$HOME/bin/patchelf" "$HOME/qutebrowser-bundle/usr/bin/patchelf"
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/patchelf"
           rm -rf "$HOME/patchelf-static" "$HOME/bin"
-          # Patch RPATH for all shared libraries and plugins explicitly
+          # Patch RPATH for all shared libraries and PyQt5 modules
           find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "\$ORIGIN:\$ORIGIN/../glibc" {} \;
           find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../lib:\$ORIGIN/../../../glibc" {} \;
           find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../lib:\$ORIGIN/../../../../glibc" {} \;
@@ -168,7 +171,7 @@ jobs:
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libpthread.so.0" || echo "libpthread.so.0 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libdouble-conversion.so.3"* || echo "libdouble-conversion.so.3 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5"* || echo "libQt5XcbQpa.so.5 missing!"
-          ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5OpenGL.so.5"* || echo "libQt5OpenGL.so.5 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5OpenGL.so"* || echo "libQt5OpenGL.so* missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libstdc++.so.6"* || echo "libstdc++.so.6 missing!"
           ls -lh "$HOME/qutebrowser-bundle/glibc/libc.so.6" || echo "libc.so.6 missing!"
           ls -lh "$HOME/qutebrowser-bundle/glibc/libdl.so.2" || echo "libdl.so.2 missing!"
@@ -185,11 +188,9 @@ jobs:
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "$0")")"  # e.g., /path/to/qutebrowser-bundle/usr/bin
           BASE_DIR="$(dirname "$(dirname "$DIR")")"  # e.g., /path/to/qutebrowser-bundle
-          # Set XDG_RUNTIME_DIR but don’t set LD_LIBRARY_PATH yet to avoid affecting bash
           export XDG_RUNTIME_DIR="$BASE_DIR/runtime"
-          mkdir -p "$XDG_RUNTIME_DIR" || true  # Use host bash and libs
-          chmod 700 "$XDG_RUNTIME_DIR" || true  # Use host bash and libs
-          # Now set environment for Qt and Python
+          mkdir -p "$XDG_RUNTIME_DIR" || true
+          chmod 700 "$XDG_RUNTIME_DIR" || true
           export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/usr/lib:$BASE_DIR/usr/lib/plugins:$BASE_DIR/usr/lib/plugins/platforms"
           export PYTHONHOME="$BASE_DIR/usr"
           export PYTHONPATH="$BASE_DIR/usr/lib/python3.10/site-packages"
@@ -202,7 +203,10 @@ jobs:
           echo "XDG_RUNTIME_DIR set to: $XDG_RUNTIME_DIR"
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
           [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
-          # Explicitly patch libqxcb.so RPATH using bundled patchelf
+          # Debug library resolution
+          echo "Checking libQt5OpenGL.so.5 resolution:"
+          ls -lh "$BASE_DIR/usr/lib/libQt5OpenGL.so"*
+          ldd "$BASE_DIR/usr/lib/plugins/platforms/libqxcb.so" || true
           "$BASE_DIR/usr/bin/patchelf" --set-rpath "$BASE_DIR/usr/lib:$BASE_DIR/glibc" "$BASE_DIR/usr/lib/plugins/platforms/libqxcb.so"
           exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/usr/lib" "$DIR/python3" -m qutebrowser "$@"
           EOF
