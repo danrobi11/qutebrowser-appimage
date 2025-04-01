@@ -81,10 +81,10 @@ jobs:
           cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /usr/lib/x86_64-linux-gnu/libpthread.so.0 "$HOME/qutebrowser-bundle/usr/lib/"
-          # Patch RPATH for all Qt shared libraries
-          for lib in "$HOME/qutebrowser-bundle/usr/lib/"libQt5*.so*; do
-            patchelf --set-rpath "\$ORIGIN/../glibc:\$ORIGIN" "$lib"
-          done
+          # Patch RPATH for all shared libraries in usr/lib/
+          find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "\$ORIGIN/../glibc:\$ORIGIN" {} \;
+          # Patch RPATH for PyQt5 shared libraries in site-packages/
+          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../../glibc:\$ORIGIN/../../../../lib" {} \;
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -108,13 +108,20 @@ jobs:
           du -sh "$HOME/qutebrowser-bundle/glibc" || true
           find "$HOME/qutebrowser-bundle/glibc" | wc -l || true
 
+      - name: Verify bundled libraries
+        run: |
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/libpthread.so.0" || echo "libpthread.so.0 missing!"
+          ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Core.so.5" || true
+          ldd "$HOME/qutebrowser-bundle/usr/bin/python3" || true
+
       - name: Write shell launcher
         run: |
           cat > "$HOME/qutebrowser-bundle/usr/bin/qutebrowser" <<'EOF'
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "$0")")"  # e.g., /path/to/qutebrowser-bundle/usr/bin
           BASE_DIR="$(dirname "$(dirname "$DIR")")"  # e.g., /path/to/qutebrowser-bundle
-          export LD_LIBRARY_PATH="$BASE_DIR/lib:$BASE_DIR/glibc:$LD_LIBRARY_PATH"
+          # Use only bundled library paths, no system paths
+          export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/lib"
           export PYTHONHOME="$BASE_DIR/usr"
           export PYTHONPATH="$BASE_DIR/usr/lib/python3.10/site-packages"
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
