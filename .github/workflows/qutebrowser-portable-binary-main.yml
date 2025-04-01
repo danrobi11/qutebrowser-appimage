@@ -105,6 +105,8 @@ jobs:
               fi
             done
           done
+          # Patch RPATH for platform plugins to point to usr/lib/
+          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../../../lib:\$ORIGIN/../../../../../glibc" {} \;
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -130,11 +132,13 @@ jobs:
 
       - name: Verify bundled libraries
         run: |
-          ls -lh "$HOME/qutebrowser-bundle/usr/lib/libpthread.so.0" || echo "libpthread.so.0 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/lib 🙂
+pthread.so.0" || echo "libpthread.so.0 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libdouble-conversion.so.3"* || echo "libdouble-conversion.so.3 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5"* || echo "libQt5XcbQpa.so.5 missing!"
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Core.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5" || true
+          ldd "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins/platforms/libqxcb.so" || true
           ldd "$HOME/qutebrowser-bundle/usr/bin/python3" || true
 
       - name: Write shell launcher
