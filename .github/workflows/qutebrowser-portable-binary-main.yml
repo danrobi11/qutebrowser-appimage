@@ -135,23 +135,15 @@ jobs:
           cd "$SCRIPT_DIR" || { echo "Failed to cd to $SCRIPT_DIR"; exit 1; }
           echo "Working directory set to: $(/bin/pwd)"
 
-          # Ensure Podman runtime directory exists
-          RUNTIME_DIR="/run/user/$(id -u)"
+          # Use a user-writable runtime directory
+          RUNTIME_DIR="$HOME/.run"
           if [ ! -d "$RUNTIME_DIR" ]; then
-            if ! mkdir -p "$RUNTIME_DIR"; then
-              echo "Cannot create $RUNTIME_DIR—trying sudo..."
-              sudo mkdir -p "$RUNTIME_DIR"
-              sudo chown $(id -u):$(id -g) "$RUNTIME_DIR"
-              sudo chmod 700 "$RUNTIME_DIR"
-            fi
+            mkdir -p "$RUNTIME_DIR"
+            chmod 700 "$RUNTIME_DIR"
             echo "Created runtime dir: $RUNTIME_DIR"
           fi
           export XDG_RUNTIME_DIR="$RUNTIME_DIR"
           echo "XDG_RUNTIME_DIR set to: $XDG_RUNTIME_DIR"
-
-          # Reset Podman storage for fresh start
-          echo "Resetting Podman storage..."
-          podman system reset --force || { echo "Podman reset failed—trying to proceed"; }
 
           # Ensure DISPLAY is set and X11 is accessible
           echo "DISPLAY: $DISPLAY"
@@ -164,16 +156,10 @@ jobs:
             exit 1
           fi
 
-          # Sync Xauthority with X server
-          echo "Syncing Xauthority..."
-          rm -f "$HOME/.Xauthority"
-          touch "$HOME/.Xauthority"  # Ensure file exists
-          chmod 600 "$HOME/.Xauthority"  # Set perms
-          xauth -f "$HOME/.Xauthority" add "$DISPLAY" . $(mcookie)
-          xhost +local:$(whoami)
-          echo "XAUTHORITY: $HOME/.Xauthority"
-          ls -l "$HOME/.Xauthority"
-          xauth -f "$HOME/.Xauthority" list
+          # Grant local X11 access
+          echo "Granting local X11 access..."
+          xhost +SI:localuser:$USER
+          xhost
 
           # Load and run the container
           echo "Loading container image..."
@@ -181,9 +167,7 @@ jobs:
           echo "Launching qutebrowser..."
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
-            -e XAUTHORITY=/home/user/.Xauthority \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
-            -v $HOME/.Xauthority:/home/user/.Xauthority \
             --userns=keep-id \
             localhost/qutebrowser-x11:latest
           EOF
