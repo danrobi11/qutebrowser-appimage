@@ -152,6 +152,7 @@ jobs:
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
+            -v $HOME/.Xauthority:/home/user/.Xauthority \
             -v $HOME:/home/user \
             -e HOME=/home/user \
             --userns=keep-id \
