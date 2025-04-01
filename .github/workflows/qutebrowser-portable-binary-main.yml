@@ -87,14 +87,14 @@ jobs:
               libpcre2-8-0 \
               libzstd1 \
               zlib1g \
-              # GLIBC and runtime (includes libm, libdl, libpthread, libresolv, librt)
+              # GLIBC and runtime
               libc6 \
               libgcc-s1 \
               libstdc++6 \
               && rm -rf /var/lib/apt/lists/*
 
-          # Install qutebrowser and Python dependencies
-          RUN pip3 install --no-cache-dir \
+          # Install qutebrowser and Python dependencies, suppress root warning
+          RUN pip3 install --no-cache-dir --root-user-action=ignore \
               qutebrowser \
               pyqt5 \
               pyqtwebengine \
@@ -102,8 +102,11 @@ jobs:
               markupsafe \
               pyyaml
 
-          # Set up runtime user (non-root, UID 1000 for host alignment)
-          RUN useradd -m -u 1000 -g 1000 user
+          # Create group and user (UID/GID 1000 for host alignment)
+          RUN groupadd -g 1000 user && \
+              useradd -m -u 1000 -g 1000 user
+
+          # Set runtime user
           USER user
           WORKDIR /home/user
 
