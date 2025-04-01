@@ -107,15 +107,9 @@ jobs:
           RUN groupadd -g 1000 user && \
               useradd -m -u 1000 -g 1000 user
 
-          # Set up runtime directory for rootless Podman
-          RUN mkdir -p /run/user/1000 && \
-              chown 1000:1000 /run/user/1000 && \
-              chmod 700 /run/user/1000
-
-          # Set runtime user and environment
+          # Set runtime user
           USER user
           WORKDIR /home/user
-          ENV XDG_RUNTIME_DIR=/run/user/1000
 
           # Entrypoint
           CMD ["python3", "-m", "qutebrowser"]
@@ -123,12 +117,38 @@ jobs:
 
       - name: Build Podman Container
         run: |
-          podman build -t qutebrowser-x11:latest -f Containerfile .
-          podman images
+          sudo podman build -t qutebrowser-x11:latest -f Containerfile .
+          sudo podman images
 
       - name: Save Container Image
         run: |
-          podman save -o qutebrowser-x11.tar qutebrowser-x11:latest
+          sudo podman save -o qutebrowser-x11.tar qutebrowser-x11:latest
+
+      - name: Create Launch Script
+        run: |
+          cat > launch-qutebrowser.sh <<'EOF'
+          #!/bin/bash
+          set -e
+
+          # Ensure XDG_RUNTIME_DIR exists
+          if [ ! -d "/run/user/$(id -u)" ]; then
+            mkdir -p "/run/user/$(id -u)"
+            chmod 700 "/run/user/$(id -u)"
+            chown $(id -u):$(id -g) "/run/user/$(id -u)"
+          fi
+          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+
+          # Load and run the container
+          podman load -i qutebrowser-x11.tar
+          podman run --rm -it \
+            -e DISPLAY=$DISPLAY \
+            -v /tmp/.X11-unix:/tmp/.X11-unix \
+            -v $HOME:/home/user \
+            -e HOME=/home/user \
+            --userns=keep-id \
+            localhost/qutebrowser-x11:latest
+          EOF
+          chmod +x launch-qutebrowser.sh
 
       - name: Generate SHA256 Checksum
         run: |
@@ -139,5 +159,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-x11-podman
-          path: qutebrowser-x11.tar
+          path: |
+            qutebrowser-x11.tar
+            launch-qutebrowser.sh
+            qutebrowser-x11.tar.sha256
           if-no-files-found: error
