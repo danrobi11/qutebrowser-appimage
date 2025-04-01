@@ -47,7 +47,7 @@ jobs:
 
       - name: Bundle Python binary and core libs
         run: |
-          mkdir -p "$HOME/qutebrowser-bundle/usr/bin" "$HOME/qutebrowser-bundle/usr/lib" "$HOME/qutebrowser-bundle/usr/lib/python3.10" "$HOME/qutebrowser-bundle/glibc"
+          mkdir -p "$HOME/qutebrowser-bundle/usr/bin" "$HOME/qutebrowser-bundle/usr/lib/plugins" "$HOME/qutebrowser-bundle/usr/lib/python3.10" "$HOME/qutebrowser-bundle/glibc"
           cp "$(which python3.10)" "$HOME/qutebrowser-bundle/usr/bin/python3"
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/python3"
           stdlib_dir=$(python3.10 -c "import sysconfig; print(sysconfig.get_path('stdlib'))")
@@ -85,6 +85,15 @@ jobs:
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /usr/lib/x86_64-linux-gnu/libpthread.so.0 "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3* "$HOME/qutebrowser-bundle/usr/lib/" || true
+          # Move Qt plugins to usr/lib/plugins/ and bundle their dependencies
+          cp -rv "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins/platforms" "$HOME/qutebrowser-bundle/usr/lib/plugins/"
+          for lib in "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/"*.so; do
+            ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+              if [ -f "$dep" ]; then
+                copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
+              fi
+            done
+          done
           # Recursively resolve dependencies for all libraries in usr/lib/
           for lib in "$HOME/qutebrowser-bundle/usr/lib/"*.so*; do
             ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
@@ -105,8 +114,8 @@ jobs:
               fi
             done
           done
-          # Patch RPATH for platform plugins to point to usr/lib/
-          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../../../lib:\$ORIGIN/../../../../../glibc" {} \;
+          # Patch RPATH for platform plugins in new location
+          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../glibc:\$ORIGIN/../../lib" {} \;
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -137,7 +146,7 @@ jobs:
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5"* || echo "libQt5XcbQpa.so.5 missing!"
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Core.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5" || true
-          ldd "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins/platforms/libqxcb.so" || true
+          ldd "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/libqxcb.so" || true
           ldd "$HOME/qutebrowser-bundle/usr/bin/python3" || true
 
       - name: Write shell launcher
@@ -147,10 +156,11 @@ jobs:
           DIR="$(dirname "$(readlink -f "$0")")"  # e.g., /path/to/qutebrowser-bundle/usr/bin
           BASE_DIR="$(dirname "$(dirname "$DIR")")"  # e.g., /path/to/qutebrowser-bundle
           # Use only bundled library paths, no system paths
-          export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/lib"
+          export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/lib:$BASE_DIR/lib/plugins/platforms"
           export PYTHONHOME="$BASE_DIR/usr"
           export PYTHONPATH="$BASE_DIR/usr/lib/python3.10/site-packages"
           export QT_DEBUG_PLUGINS=1  # Enable Qt plugin debugging
+          export QT_PLUGIN_PATH="$BASE_DIR/lib/plugins"  # Explicitly set plugin path
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
           [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
           exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/lib" "$DIR/python3" -m qutebrowser "$@"
@@ -160,6 +170,7 @@ jobs:
       - name: Verify bundle contents
         run: |
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/"
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/"
           ls -lh "$HOME/qutebrowser-bundle/usr/bin/"
           ls -lh "$HOME/qutebrowser-bundle/glibc/"
           du -sh "$HOME/qutebrowser-bundle/"* || true
