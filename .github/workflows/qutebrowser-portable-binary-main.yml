@@ -129,9 +129,10 @@ jobs:
           cp -v "$HOME/bin/patchelf" "$HOME/qutebrowser-bundle/usr/bin/patchelf"
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/patchelf"
           rm -rf "$HOME/patchelf-static" "$HOME/bin"
-          # Patch RPATH for all shared libraries with absolute paths
-          find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "$HOME/qutebrowser-bundle/glibc:$HOME/qutebrowser-bundle/usr/lib" {} \;
-          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "$HOME/qutebrowser-bundle/glibc:$HOME/qutebrowser-bundle/usr/lib" {} \;
+          # Patch RPATH for all shared libraries and plugins explicitly
+          find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "\$ORIGIN:\$ORIGIN/../glibc" {} \;
+          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../lib:\$ORIGIN/../../../glibc" {} \;
+          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../lib:\$ORIGIN/../../../../glibc" {} \;
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -189,7 +190,7 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR" || true  # Use host bash and libs
           chmod 700 "$XDG_RUNTIME_DIR" || true  # Use host bash and libs
           # Now set environment for Qt and Python
-          export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/usr/lib:$BASE_DIR/usr/lib/plugins/platforms"
+          export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/usr/lib:$BASE_DIR/usr/lib/plugins:$BASE_DIR/usr/lib/plugins/platforms"
           export PYTHONHOME="$BASE_DIR/usr"
           export PYTHONPATH="$BASE_DIR/usr/lib/python3.10/site-packages"
           export QT_DEBUG_PLUGINS=1
@@ -202,7 +203,7 @@ jobs:
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
           [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
           # Explicitly patch libqxcb.so RPATH using bundled patchelf
-          "$BASE_DIR/usr/bin/patchelf" --set-rpath "$BASE_DIR/glibc:$BASE_DIR/usr/lib" "$BASE_DIR/usr/lib/plugins/platforms/libqxcb.so"
+          "$BASE_DIR/usr/bin/patchelf" --set-rpath "$BASE_DIR/usr/lib:$BASE_DIR/glibc" "$BASE_DIR/usr/lib/plugins/platforms/libqxcb.so"
           exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/usr/lib" "$DIR/python3" -m qutebrowser "$@"
           EOF
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
