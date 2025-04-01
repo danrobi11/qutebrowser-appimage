@@ -27,7 +27,7 @@ jobs:
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
 
-          # Install all dependencies
+          # Install base dependencies (including python3-pip for upgrading)
           RUN apt update && apt install -y \
               python3.10 \
               python3-pip \
@@ -93,7 +93,10 @@ jobs:
               libstdc++6 \
               && rm -rf /var/lib/apt/lists/*
 
-          # Install qutebrowser and Python dependencies, suppress root warning
+          # Upgrade pip to a version that supports --root-user-action
+          RUN pip3 install --no-cache-dir pip>=23.0
+
+          # Install qutebrowser and Python dependencies with updated pip
           RUN pip3 install --no-cache-dir --root-user-action=ignore \
               qutebrowser \
               pyqt5 \
