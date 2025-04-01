@@ -135,28 +135,43 @@ jobs:
           cd "$SCRIPT_DIR" || { echo "Failed to cd to $SCRIPT_DIR"; exit 1; }
           echo "Working directory set to: $(/bin/pwd)"
 
-          # Use a user-writable runtime directory
-          RUNTIME_DIR="$HOME/.run"
+          # Ensure Podman runtime directory exists
+          RUNTIME_DIR="/run/user/$(id -u)"
           if [ ! -d "$RUNTIME_DIR" ]; then
-            mkdir -p "$RUNTIME_DIR"
-            chmod 700 "$RUNTIME_DIR"
+            if ! mkdir -p "$RUNTIME_DIR"; then
+              echo "Cannot create $RUNTIME_DIR—trying sudo..."
+              sudo mkdir -p "$RUNTIME_DIR"
+              sudo chown $(id -u):$(id -g) "$RUNTIME_DIR"
+              sudo chmod 700 "$RUNTIME_DIR"
+            fi
             echo "Created runtime dir: $RUNTIME_DIR"
           fi
           export XDG_RUNTIME_DIR="$RUNTIME_DIR"
           echo "XDG_RUNTIME_DIR set to: $XDG_RUNTIME_DIR"
 
-          # Debug X11 env
+          # Reset Podman storage for fresh start
+          echo "Resetting Podman storage..."
+          podman system reset --force || { echo "Podman reset failed—trying to proceed"; }
+
+          # Ensure DISPLAY is set
           echo "DISPLAY: $DISPLAY"
-          if [ -f "$HOME/.Xauthority" ]; then
-            echo "XAUTHORITY: $HOME/.Xauthority"
-            ls -l "$HOME/.Xauthority"
-            xauth list
-          else
-            echo "No .Xauthority file found—generating..."
-            xauth add "$DISPLAY" . $(mcookie)
-            ls -l "$HOME/.Xauthority"
-            xauth list
+          if [ -z "$DISPLAY" ]; then
+            echo "DISPLAY unset—trying :0"
+            export DISPLAY=:0
           fi
+          if ! xset q >/dev/null 2>&1; then
+            echo "Cannot connect to X server $DISPLAY—run from an X session"
+            exit 1
+          fi
+
+          # Sync Xauthority with X server
+          echo "Syncing Xauthority..."
+          rm -f ~/.Xauthority
+          xauth add "$DISPLAY" . $(mcookie)
+          xhost +local:$(whoami)
+          echo "XAUTHORITY: $HOME/.Xauthority"
+          ls -l "$HOME/.Xauthority"
+          xauth list
 
           # Load and run the container
           echo "Loading container image..."
