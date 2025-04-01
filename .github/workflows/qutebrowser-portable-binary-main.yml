@@ -85,8 +85,9 @@ jobs:
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /usr/lib/x86_64-linux-gnu/libpthread.so.0 "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3* "$HOME/qutebrowser-bundle/usr/lib/" || true
-          # Move Qt plugins to usr/lib/plugins/ and bundle their dependencies
+          # Move Qt plugins to usr/lib/plugins/ and remove original
           cp -rv "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins/platforms" "$HOME/qutebrowser-bundle/usr/lib/plugins/"
+          rm -rf "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins"
           for lib in "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/"*.so; do
             ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
               if [ -f "$dep" ]; then
@@ -114,8 +115,9 @@ jobs:
               fi
             done
           done
-          # Patch RPATH for platform plugins in new location
+          # Patch and verify RPATH for platform plugins
           find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../glibc:\$ORIGIN/../../lib" {} \;
+          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --print-rpath {} \;
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -129,7 +131,6 @@ jobs:
               cp -v "$lib" "$ldpath/"
             done
           '
-          # Verify linker exists and is executable
           [ -f "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" ] || { echo "Error: ld-linux-x86-64.so.2 not found"; exit 1; }
           [ -x "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" ] || { echo "Error: ld-linux-x86-64.so.2 not executable"; chmod +x "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" || exit 1; }
 
@@ -155,7 +156,6 @@ jobs:
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "$0")")"  # e.g., /path/to/qutebrowser-bundle/usr/bin
           BASE_DIR="$(dirname "$(dirname "$DIR")")"  # e.g., /path/to/qutebrowser-bundle
-          # Use only bundled library paths, no system paths
           export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/lib:$BASE_DIR/lib/plugins/platforms"
           export PYTHONHOME="$BASE_DIR/usr"
           export PYTHONPATH="$BASE_DIR/usr/lib/python3.10/site-packages"
@@ -175,6 +175,7 @@ jobs:
           ls -lh "$HOME/qutebrowser-bundle/glibc/"
           du -sh "$HOME/qutebrowser-bundle/"* || true
           find "$HOME/qutebrowser-bundle" | wc -l || true
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins" || echo "Original plugins directory should not exist"
 
       - name: Create .tar.gz archive
         run: |
