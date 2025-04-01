@@ -35,11 +35,10 @@ jobs:
 
       - name: Install Qutebrowser and PyQt5 via pip (user local)
         run: |
-          python3.10 -m pip install --upgrade --no-cache-dir --user qutebrowser pyqt5 pyqtwebengine pyqt5-qtopengl jinja2 markupsafe pyyaml
+          python3.10 -m pip install --upgrade --no-cache-dir --user qutebrowser pyqt5 pyqtwebengine jinja2 markupsafe pyyaml
           python3.10 -m pip show qutebrowser || exit 1
           python3.10 -m pip show pyqt5 || exit 1
           python3.10 -m pip show pyqtwebengine || exit 1
-          python3.10 -m pip show pyqt5-qtopengl || exit 1
           python3.10 -m pip show jinja2 || exit 1
           python3.10 -m pip show markupsafe || exit 1
           python3.10 -m pip show pyyaml || exit 1
