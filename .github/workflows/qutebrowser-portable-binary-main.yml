@@ -66,7 +66,7 @@ jobs:
             if [ ! -f "$dest/$basename" ]; then
               cp -v "$lib" "$dest/"
               ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
-                if [ -f "$dep" ] && ! echo "$dep" | grep -q "libc.so\|libm.so\|libdl.so"; then
+                if [ -f "$dep" ]; then  # Copy all dependencies, including GLIBC
                   copy_deps "$dep" "$dest"
                 fi
               done
@@ -94,7 +94,7 @@ jobs:
           rm -rf "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins"
           for lib in "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/"*.so; do
             ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
-              if [ -f "$dep" ] && ! echo "$dep" | grep -q "libc.so\|libm.so\|libdl.so"; then
+              if [ -f "$dep" ]; then  # Copy all dependencies, including GLIBC
                 copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
               fi
             done
@@ -104,7 +104,7 @@ jobs:
           # Patch RPATH for PyQt5 shared libraries in site-packages/
           find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../../glibc:\$ORIGIN/../../../../lib" {} \;
           # Patch RPATH for platform plugins
-          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../lib:\$ORIGIN/../../glibc" {} \;
+          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../glibc:\$ORIGIN/../../lib" {} \;
           find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --print-rpath {} \;
           # Check dependencies of libqxcb.so
           ldd "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/libqxcb.so" || true
@@ -117,6 +117,13 @@ jobs:
             mkdir -p "$ldpath"
             cp -v /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$ldpath/"
             chmod +x "$ldpath/ld-linux-x86-64.so.2"
+            # Copy all GLIBC libraries
+            cp -v /lib/x86_64-linux-gnu/libc.so.6 "$ldpath/"
+            cp -v /lib/x86_64-linux-gnu/libm.so.6 "$ldpath/"
+            cp -v /lib/x86_64-linux-gnu/libdl.so.2 "$ldpath/"
+            cp -v /lib/x86_64-linux-gnu/libpthread.so.0 "$ldpath/"
+            cp -v /lib/x86_64-linux-gnu/librt.so.1 "$ldpath/"
+            cp -v /lib/x86_64-linux-gnu/libresolv.so.2 "$ldpath/"
             ldd /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 | awk '"'"'{print $3}'"'"' | grep "^/" | while read lib; do
               cp -v "$lib" "$ldpath/"
             done
@@ -135,6 +142,8 @@ jobs:
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libpthread.so.0" || echo "libpthread.so.0 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libdouble-conversion.so.3"* || echo "libdouble-conversion.so.3 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5"* || echo "libQt5XcbQpa.so.5 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/glibc/libc.so.6" || echo "libc.so.6 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/glibc/libdl.so.2" || echo "libdl.so.2 missing!"
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Core.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/libqxcb.so" || true
