@@ -76,9 +76,12 @@ jobs:
           ldd "$(which python3.10)" | grep -o '/[^ ]*\.so[^ ]*' | while read lib; do
             copy_deps "$lib" "$HOME/qutebrowser-bundle/usr/lib"
           done
-          # Bundle Qt libraries with specific versions
+          # Bundle Qt libraries with specific versions and create symlinks
           for lib in libQt5Core.so.5.15.3 libQt5Gui.so.5.15.3 libQt5Widgets.so.5.15.3 libQt5WebEngineCore.so.5.15.9 libQt5WebEngineWidgets.so.5.15.9 libQt5XcbQpa.so.5.15.3 libQt5DBus.so.5.15.3 libQt5Qml.so.5 libQt5Quick.so.5 libQt5WebChannel.so.5; do
             find /usr/lib -name "$lib" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
+            # Create .so.5 symlink if it doesn't exist
+            base=$(echo "$lib" | sed 's/\.so\..*/.so.5/')
+            [ -f "$HOME/qutebrowser-bundle/usr/lib/$base" ] || ln -sv "$lib" "$HOME/qutebrowser-bundle/usr/lib/$base"
           done
           # Bundle XCB and other Qt dependencies
           for lib in libxcb-icccm libxcb-image libxcb-keysyms libxcb-render-util libxcb-render libxcb-shm libxcb-sync libxkbcommon libxkbcommon-x11 libfontconfig libfreetype libpng16 libharfbuzz libz.so.1; do
@@ -136,10 +139,12 @@ jobs:
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libpthread.so.0" || echo "libpthread.so.0 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libdouble-conversion.so.3"* || echo "libdouble-conversion.so.3 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5"* || echo "libQt5XcbQpa.so.5 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5Widgets.so.5"* || echo "libQt5Widgets.so.5 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libstdc++.so.6"* || echo "libstdc++.so.6 missing!"
           ls -lh "$HOME/qutebrowser-bundle/glibc/libc.so.6" || echo "libc.so.6 missing!"
           ls -lh "$HOME/qutebrowser-bundle/glibc/libdl.so.2" || echo "libdl.so.2 missing!"
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Core.so.5" || true
+          ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Widgets.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/libqxcb.so" || true
           ldd "$HOME/qutebrowser-bundle/usr/bin/python3" || true
@@ -156,9 +161,10 @@ jobs:
           export QT_DEBUG_PLUGINS=1
           export QT_PLUGIN_PATH="$BASE_DIR/usr/lib/plugins"
           export QT_QPA_PLATFORM_PLUGIN_PATH="$BASE_DIR/usr/lib/plugins/platforms"
-          export XDG_RUNTIME_DIR="$BASE_DIR/runtime"  # Use a directory within the bundle
-          mkdir -p "$XDG_RUNTIME_DIR"  # Create runtime dir if it doesn't exist
-          chmod 700 "$XDG_RUNTIME_DIR"  # Ensure correct permissions
+          export XDG_RUNTIME_DIR="$BASE_DIR/runtime"
+          # Create runtime dir with error handling
+          mkdir -p "$XDG_RUNTIME_DIR" || { echo "Failed to create XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"; exit 1; }
+          chmod 700 "$XDG_RUNTIME_DIR" || { echo "Failed to set permissions on XDG_RUNTIME_DIR"; exit 1; }
           echo "QT_PLUGIN_PATH set to: $QT_PLUGIN_PATH"
           echo "QT_QPA_PLATFORM_PLUGIN_PATH set to: $QT_QPA_PLATFORM_PLUGIN_PATH"
           echo "LD_LIBRARY_PATH set to: $LD_LIBRARY_PATH"
