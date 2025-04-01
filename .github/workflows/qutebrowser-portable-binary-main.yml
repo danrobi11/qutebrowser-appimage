@@ -27,7 +27,7 @@ jobs:
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
 
-          # Install all dependencies and their transitive dependencies
+          # Install all dependencies
           RUN apt update && apt install -y \
               python3.10 \
               python3-pip \
@@ -72,7 +72,6 @@ jobs:
               libxext6 \
               libxfixes3 \
               libxrender1 \
-              # Mesa for OpenGL
               libgl1-mesa-dri \
               libglx-mesa0 \
               # Audio/Video for WebEngine
@@ -88,15 +87,10 @@ jobs:
               libpcre2-8-0 \
               libzstd1 \
               zlib1g \
-              # Python runtime
+              # GLIBC and runtime (includes libm, libdl, libpthread, libresolv, librt)
               libc6 \
               libgcc-s1 \
               libstdc++6 \
-              libm6 \
-              libdl2 \
-              libpthread0 \
-              libresolv2 \
-              librt1 \
               && rm -rf /var/lib/apt/lists/*
 
           # Install qutebrowser and Python dependencies
@@ -108,7 +102,7 @@ jobs:
               markupsafe \
               pyyaml
 
-          # Set up runtime user (non-root for alignment with host UID)
+          # Set up runtime user (non-root, UID 1000 for host alignment)
           RUN useradd -m -u 1000 -g 1000 user
           USER user
           WORKDIR /home/user
