@@ -184,6 +184,8 @@ jobs:
 
       - name: Write shell launcher
         run: |
+          # Force overwrite any existing launcher
+          rm -f "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
           cat > "$HOME/qutebrowser-bundle/usr/bin/qutebrowser" <<'EOF'
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "$0")")"  # e.g., /path/to/qutebrowser-bundle/usr/bin
@@ -192,25 +194,31 @@ jobs:
           mkdir -p "$XDG_RUNTIME_DIR" || true
           chmod 700 "$XDG_RUNTIME_DIR" || true
           export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/usr/lib:$BASE_DIR/usr/lib/plugins:$BASE_DIR/usr/lib/plugins/platforms"
+          export LD_PRELOAD="$BASE_DIR/usr/lib/libQt5OpenGL.so.5"
           export PYTHONHOME="$BASE_DIR/usr"
           export PYTHONPATH="$BASE_DIR/usr/lib/python3.10/site-packages"
           export QT_DEBUG_PLUGINS=1
           export QT_PLUGIN_PATH="$BASE_DIR/usr/lib/plugins"
           export QT_QPA_PLATFORM_PLUGIN_PATH="$BASE_DIR/usr/lib/plugins/platforms"
+          echo "Launcher version: 2025-04-01-v2"
           echo "QT_PLUGIN_PATH set to: $QT_PLUGIN_PATH"
           echo "QT_QPA_PLATFORM_PLUGIN_PATH set to: $QT_QPA_PLATFORM_PLUGIN_PATH"
           echo "LD_LIBRARY_PATH set to: $LD_LIBRARY_PATH"
+          echo "LD_PRELOAD set to: $LD_PRELOAD"
           echo "XDG_RUNTIME_DIR set to: $XDG_RUNTIME_DIR"
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
           [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
           # Debug library resolution
-          echo "Checking libQt5OpenGL.so.5 resolution:"
-          ls -lh "$BASE_DIR/usr/lib/libQt5OpenGL.so"*
-          ldd "$BASE_DIR/usr/lib/plugins/platforms/libqxcb.so" || true
+          echo "Checking bundled libraries:"
+          ls -lh "$BASE_DIR/usr/lib/libQt5OpenGL.so"* || echo "libQt5OpenGL.so* not found!"
+          ldd "$BASE_DIR/usr/lib/plugins/platforms/libqxcb.so" || echo "ldd failed for libqxcb.so"
+          ldd "$BASE_DIR/usr/lib/python3.10/site-packages/PyQt5/QtOpenGL.abi3.so" || echo "ldd failed for QtOpenGL.abi3.so"
           "$BASE_DIR/usr/bin/patchelf" --set-rpath "$BASE_DIR/usr/lib:$BASE_DIR/glibc" "$BASE_DIR/usr/lib/plugins/platforms/libqxcb.so"
-          exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/usr/lib" "$DIR/python3" -m qutebrowser "$@"
+          exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/usr/lib" "$DIR/python3" -m qutebrowser "$@" 2> "$BASE_DIR/runtime/error.log"
           EOF
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
+          # Verify launcher content
+          cat "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
 
       - name: Verify bundle contents
         run: |
