@@ -14,10 +14,10 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
-      - name: Install Podman
+      - name: Install Podman and runc
         run: |
           sudo apt update
-          sudo apt install -y podman dbus
+          sudo apt install -y podman runc
 
       - name: Create Containerfile
         run: |
@@ -27,10 +27,8 @@ jobs:
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
 
-          # Install base dependencies with D-Bus support
-          RUN apt update && apt install -y dbus && \
-              dbus-daemon --system --fork && \
-              apt install -y \
+          # Install base dependencies
+          RUN apt update && apt install -y \
               python3.10 \
               python3-pip \
               python3-setuptools \
@@ -117,9 +115,9 @@ jobs:
           CMD ["python3", "-m", "qutebrowser"]
           EOF
 
-      - name: Build Podman Container
+      - name: Build Podman Container with runc
         run: |
-          sudo podman build -t qutebrowser-x11:latest -f Containerfile .
+          sudo podman build --runtime /usr/bin/runc -t qutebrowser-x11:latest -f Containerfile .
           sudo podman images
 
       - name: Save Container Image
