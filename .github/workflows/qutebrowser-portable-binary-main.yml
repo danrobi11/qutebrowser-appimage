@@ -153,7 +153,7 @@ jobs:
           echo "Resetting Podman storage..."
           podman system reset --force || { echo "Podman reset failed—trying to proceed"; }
 
-          # Ensure DISPLAY is set
+          # Ensure DISPLAY is set and X11 is accessible
           echo "DISPLAY: $DISPLAY"
           if [ -z "$DISPLAY" ]; then
             echo "DISPLAY unset—trying :0"
@@ -166,12 +166,14 @@ jobs:
 
           # Sync Xauthority with X server
           echo "Syncing Xauthority..."
-          rm -f ~/.Xauthority
-          xauth add "$DISPLAY" . $(mcookie)
+          rm -f "$HOME/.Xauthority"
+          touch "$HOME/.Xauthority"  # Ensure file exists
+          chmod 600 "$HOME/.Xauthority"  # Set perms
+          xauth -f "$HOME/.Xauthority" add "$DISPLAY" . $(mcookie)
           xhost +local:$(whoami)
           echo "XAUTHORITY: $HOME/.Xauthority"
           ls -l "$HOME/.Xauthority"
-          xauth list
+          xauth -f "$HOME/.Xauthority" list
 
           # Load and run the container
           echo "Loading container image..."
