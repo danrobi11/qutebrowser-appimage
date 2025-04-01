@@ -62,12 +62,15 @@ jobs:
             local lib="$1"
             local dest="$2"
             [ ! -f "$lib" ] && return
-            cp -v "$lib" "$dest/"
-            ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
-              if [ -f "$dep" ] && [ ! -f "$dest/$(basename "$dep")" ]; then
-                copy_deps "$dep" "$dest"
-              fi
-            done
+            local basename=$(basename "$lib")
+            if [ ! -f "$dest/$basename" ]; then
+              cp -v "$lib" "$dest/"
+              ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+                if [ -f "$dep" ]; then
+                  copy_deps "$dep" "$dest"
+                fi
+              done
+            fi
           }
           # Bundle Python dependencies
           ldd "$(which python3.10)" | grep -o '/[^ ]*\.so[^ ]*' | while read lib; do
@@ -77,14 +80,31 @@ jobs:
           for lib in libQt5Core libQt5Gui libQt5Widgets libQt5WebEngineCore libQt5WebEngineWidgets; do
             find /usr/lib -name "${lib}.so*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
           done
-          # Additional critical libs
+          # Bundle additional critical libs
           cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 "$HOME/qutebrowser-bundle/usr/lib/"
           cp -v /usr/lib/x86_64-linux-gnu/libpthread.so.0 "$HOME/qutebrowser-bundle/usr/lib/"
+          cp -v /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3* "$HOME/qutebrowser-bundle/usr/lib/" || true
+          # Recursively resolve dependencies for all libraries in usr/lib/
+          for lib in "$HOME/qutebrowser-bundle/usr/lib/"*.so*; do
+            ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+              if [ -f "$dep" ]; then
+                copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
+              fi
+            done
+          done
           # Patch RPATH for all shared libraries in usr/lib/
           find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "\$ORIGIN/../glibc:\$ORIGIN" {} \;
           # Patch RPATH for PyQt5 shared libraries in site-packages/
           find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../../glibc:\$ORIGIN/../../../../lib" {} \;
+          # Recursively resolve dependencies for PyQt5 shared objects
+          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" | while read lib; do
+            ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+              if [ -f "$dep" ]; then
+                copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
+              fi
+            done
+          done
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -111,6 +131,7 @@ jobs:
       - name: Verify bundled libraries
         run: |
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libpthread.so.0" || echo "libpthread.so.0 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/libdouble-conversion.so.3"* || echo "libdouble-conversion.so.3 missing!"
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Core.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/bin/python3" || true
 
