@@ -66,7 +66,7 @@ jobs:
             if [ ! -f "$dest/$basename" ]; then
               cp -v "$lib" "$dest/"
               ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
-                if [ -f "$dep" ]; then
+                if [ -f "$dep" ] && ! echo "$dep" | grep -q "libc.so\|libm.so\|libdl.so"; then
                   copy_deps "$dep" "$dest"
                 fi
               done
@@ -77,7 +77,11 @@ jobs:
             copy_deps "$lib" "$HOME/qutebrowser-bundle/usr/lib"
           done
           # Bundle Qt and PyQt dependencies
-          for lib in libQt5Core libQt5Gui libQt5Widgets libQt5WebEngineCore libQt5WebEngineWidgets libQt5XcbQpa; do
+          for lib in libQt5Core libQt5Gui libQt5Widgets libQt5WebEngineCore libQt5WebEngineWidgets libQt5XcbQpa libQt5DBus; do
+            find /usr/lib -name "${lib}.so*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
+          done
+          # Bundle XCB dependencies
+          for lib in libxcb-icccm libxcb-image libxcb-keysyms libxcb-render-util; do
             find /usr/lib -name "${lib}.so*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
           done
           # Bundle additional critical libs
@@ -90,15 +94,7 @@ jobs:
           rm -rf "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins"
           for lib in "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/"*.so; do
             ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
-              if [ -f "$dep" ]; then
-                copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
-              fi
-            done
-          done
-          # Recursively resolve dependencies for all libraries in usr/lib/
-          for lib in "$HOME/qutebrowser-bundle/usr/lib/"*.so*; do
-            ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
-              if [ -f "$dep" ]; then
+              if [ -f "$dep" ] && ! echo "$dep" | grep -q "libc.so\|libm.so\|libdl.so"; then
                 copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
               fi
             done
@@ -107,17 +103,11 @@ jobs:
           find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "\$ORIGIN/../glibc:\$ORIGIN" {} \;
           # Patch RPATH for PyQt5 shared libraries in site-packages/
           find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../../glibc:\$ORIGIN/../../../../lib" {} \;
-          # Recursively resolve dependencies for PyQt5 shared objects
-          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" | while read lib; do
-            ldd "$lib" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
-              if [ -f "$dep" ]; then
-                copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
-              fi
-            done
-          done
-          # Patch and verify RPATH for platform plugins
+          # Patch RPATH for platform plugins
           find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../lib:\$ORIGIN/../../glibc" {} \;
           find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --print-rpath {} \;
+          # Check dependencies of libqxcb.so
+          ldd "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/libqxcb.so" || true
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -156,16 +146,18 @@ jobs:
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "$0")")"  # e.g., /path/to/qutebrowser-bundle/usr/bin
           BASE_DIR="$(dirname "$(dirname "$DIR")")"  # e.g., /path/to/qutebrowser-bundle
-          export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/lib:$BASE_DIR/lib/plugins/platforms"
+          export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/usr/lib:$BASE_DIR/usr/lib/plugins/platforms"
           export PYTHONHOME="$BASE_DIR/usr"
           export PYTHONPATH="$BASE_DIR/usr/lib/python3.10/site-packages"
-          export QT_DEBUG_PLUGINS=1  # Enable Qt plugin debugging
-          export QT_PLUGIN_PATH="$BASE_DIR/lib/plugins"  # Explicitly set plugin path
+          export QT_DEBUG_PLUGINS=1
+          export QT_PLUGIN_PATH="$BASE_DIR/usr/lib/plugins"
+          export QT_QPA_PLATFORM_PLUGIN_PATH="$BASE_DIR/usr/lib/plugins/platforms"
           echo "QT_PLUGIN_PATH set to: $QT_PLUGIN_PATH"
+          echo "QT_QPA_PLATFORM_PLUGIN_PATH set to: $QT_QPA_PLATFORM_PLUGIN_PATH"
           echo "LD_LIBRARY_PATH set to: $LD_LIBRARY_PATH"
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
           [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
-          exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/lib" "$DIR/python3" -m qutebrowser "$@"
+          exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/usr/lib" "$DIR/python3" -m qutebrowser "$@"
           EOF
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
 
@@ -178,6 +170,7 @@ jobs:
           du -sh "$HOME/qutebrowser-bundle/"* || true
           find "$HOME/qutebrowser-bundle" | wc -l || true
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins" || echo "Original plugins directory should not exist"
+          ls -lh "$HOME/qutebrowser-bundle/lib/plugins/platforms" || echo "Incorrect lib/plugins/platforms directory should not exist"
 
       - name: Create .tar.gz archive
         run: |
