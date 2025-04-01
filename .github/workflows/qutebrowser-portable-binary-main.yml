@@ -116,7 +116,7 @@ jobs:
             done
           done
           # Patch and verify RPATH for platform plugins
-          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../glibc:\$ORIGIN/../../lib" {} \;
+          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../lib:\$ORIGIN/../../glibc" {} \;
           find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --print-rpath {} \;
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
@@ -161,6 +161,8 @@ jobs:
           export PYTHONPATH="$BASE_DIR/usr/lib/python3.10/site-packages"
           export QT_DEBUG_PLUGINS=1  # Enable Qt plugin debugging
           export QT_PLUGIN_PATH="$BASE_DIR/lib/plugins"  # Explicitly set plugin path
+          echo "QT_PLUGIN_PATH set to: $QT_PLUGIN_PATH"
+          echo "LD_LIBRARY_PATH set to: $LD_LIBRARY_PATH"
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
           [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
           exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/lib" "$DIR/python3" -m qutebrowser "$@"
