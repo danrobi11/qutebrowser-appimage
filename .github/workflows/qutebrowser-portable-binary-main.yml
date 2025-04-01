@@ -118,6 +118,12 @@ jobs:
               fi
             done
           done
+          # Bundle patchelf binary for runtime use
+          cp -v "$(which patchelf)" "$HOME/qutebrowser-bundle/usr/bin/patchelf"
+          chmod +x "$HOME/qutebrowser-bundle/usr/bin/patchelf"
+          ldd "$(which patchelf)" | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+            copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
+          done
           # Patch RPATH for all shared libraries with absolute paths
           find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "$HOME/qutebrowser-bundle/glibc:$HOME/qutebrowser-bundle/usr/lib" {} \;
           find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "$HOME/qutebrowser-bundle/glibc:$HOME/qutebrowser-bundle/usr/lib" {} \;
@@ -188,8 +194,8 @@ jobs:
           echo "XDG_RUNTIME_DIR set to: $XDG_RUNTIME_DIR"
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
           [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
-          # Explicitly patch libqxcb.so RPATH to ensure it uses bundled libstdc++.so.6
-          patchelf --set-rpath "$BASE_DIR/glibc:$BASE_DIR/usr/lib" "$BASE_DIR/usr/lib/plugins/platforms/libqxcb.so"
+          # Explicitly patch libqxcb.so RPATH using bundled patchelf
+          "$BASE_DIR/usr/bin/patchelf" --set-rpath "$BASE_DIR/glibc:$BASE_DIR/usr/lib" "$BASE_DIR/usr/lib/plugins/platforms/libqxcb.so"
           exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/usr/lib" "$DIR/python3" -m qutebrowser "$@"
           EOF
           chmod +x "$HOME/qutebrowser-bundle/usr/bin/qutebrowser"
