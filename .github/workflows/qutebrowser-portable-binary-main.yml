@@ -31,7 +31,8 @@ jobs:
             build-essential \
             patchelf \
             gcc \
-            wget
+            wget \
+            libstdc++6  # Ensure system libstdc++ is installed for reference
 
       - name: Install Qutebrowser and PyQt5 via pip (user local)
         run: |
@@ -95,12 +96,17 @@ jobs:
               copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
             done
           done
-          # Bundle additional critical libs with their dependencies
-          for lib in libstdc++.so.6 libgcc_s.so.1 libpthread.so.0 libdouble-conversion.so.3 libz.so.1 libicui18n.so.66 libicuuc.so.66 libicudata.so.66 libglib-2.0.so.0 libpcre2-8.so.0; do
+          # Bundle additional critical libs with their dependencies, prioritizing libstdc++ from Qt's environment
+          for lib in libgcc_s.so.1 libpthread.so.0 libdouble-conversion.so.3 libz.so.1 libicui18n.so.66 libicuuc.so.66 libicudata.so.66 libglib-2.0.so.0 libpcre2-8.so.0; do
             find /usr/lib /lib -name "$lib*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
             find /usr/lib /lib -name "$lib*" -exec ldd {} \; | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
               copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
             done
+          done
+          # Explicitly bundle libstdc++.so.6 from the system (Ubuntu 22.04) to match Qt's build
+          cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6 "$HOME/qutebrowser-bundle/usr/lib/"
+          ldd /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+            copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
           done
           # Move Qt plugins and ensure dependencies
           cp -rv "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins/platforms" "$HOME/qutebrowser-bundle/usr/lib/plugins/"
@@ -112,7 +118,7 @@ jobs:
               fi
             done
           done
-          # Patch RPATH for all shared libraries
+          # Patch RPATH for all shared libraries, ensuring glibc comes first for critical libs
           find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "\$ORIGIN/../glibc:\$ORIGIN" {} \;
           find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../../glibc:\$ORIGIN/../../../../lib" {} \;
           find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../glibc:\$ORIGIN/../../lib" {} \;
@@ -132,6 +138,7 @@ jobs:
             cp -v /lib/x86_64-linux-gnu/librt.so.1 "$ldpath/"
             cp -v /lib/x86_64-linux-gnu/libresolv.so.2 "$ldpath/"
             cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 "$ldpath/"
+            # Use system libstdc++.so.6 in glibc dir for consistency
             cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6 "$ldpath/"
             ldd /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 | awk '"'"'{print $3}'"'"' | grep "^/" | while read lib; do
               cp -v "$lib" "$ldpath/"
@@ -151,8 +158,10 @@ jobs:
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libpthread.so.0" || echo "libpthread.so.0 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libdouble-conversion.so.3"* || echo "libdouble-conversion.so.3 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5"* || echo "libQt5XcbQpa.so.5 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/libstdc++.so.6"* || echo "libstdc++.so.6 missing!"
           ls -lh "$HOME/qutebrowser-bundle/glibc/libc.so.6" || echo "libc.so.6 missing!"
           ls -lh "$HOME/qutebrowser-bundle/glibc/libdl.so.2" || echo "libdl.so.2 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/glibc/libstdc++.so.6"* || echo "libstdc++.so.6 missing in glibc!"
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Core.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/libqxcb.so" || true
