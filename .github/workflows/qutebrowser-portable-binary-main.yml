@@ -132,8 +132,7 @@ jobs:
 
       - name: Verify bundled libraries
         run: |
-          ls -lh "$HOME/qutebrowser-bundle/usr/lib/lib 🙂
-pthread.so.0" || echo "libpthread.so.0 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/libpthread.so.0" || echo "libpthread.so.0 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libdouble-conversion.so.3"* || echo "libdouble-conversion.so.3 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5"* || echo "libQt5XcbQpa.so.5 missing!"
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Core.so.5" || true
