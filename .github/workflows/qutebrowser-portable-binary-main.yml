@@ -31,8 +31,7 @@ jobs:
             build-essential \
             patchelf \
             gcc \
-            wget \
-            docker.io  # Added for glibc extraction
+            wget
 
       - name: Install Qutebrowser and PyQt5 via pip (user local)
         run: |
@@ -56,8 +55,8 @@ jobs:
 
       - name: Patch interpreter and bundle all shared libraries recursively
         run: |
-          patchelf --set-interpreter "$HOME/qutebrowser-bundle/glibc/ld-linux-x86-64.so.2" "$HOME/qutebrowser-bundle/usr/bin/python3"
-          patchelf --set-rpath "$HOME/qutebrowser-bundle/glibc:$HOME/qutebrowser-bundle/usr/lib" "$HOME/qutebrowser-bundle/usr/bin/python3"
+          patchelf --set-interpreter "\$ORIGIN/../glibc/ld-linux-x86-64.so.2" "$HOME/qutebrowser-bundle/usr/bin/python3"
+          patchelf --set-rpath "\$ORIGIN/../glibc:\$ORIGIN/../lib" "$HOME/qutebrowser-bundle/usr/bin/python3"
           # Function to copy library and its dependencies recursively
           copy_deps() {
             local lib="$1"
@@ -77,19 +76,27 @@ jobs:
           ldd "$(which python3.10)" | grep -o '/[^ ]*\.so[^ ]*' | while read lib; do
             copy_deps "$lib" "$HOME/qutebrowser-bundle/usr/lib"
           done
-          # Bundle Qt libraries with specific version (5.15.3) for consistency
+          # Bundle Qt libraries with specific version (5.15.3) for consistency and their dependencies
           for lib in libQt5Core.so.5.15.3 libQt5Gui.so.5.15.3 libQt5Widgets.so.5.15.3 libQt5WebEngineCore.so.5.15.9 libQt5WebEngineWidgets.so.5.15.9 libQt5XcbQpa.so.5.15.3 libQt5DBus.so.5.15.3; do
             find /usr/lib -name "$lib" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
+            find /usr/lib -name "$lib" -exec ldd {} \; | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+              copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
+            done
           done
-          # Bundle XCB dependencies
-          for lib in libxcb-icccm libxcb-image libxcb-keysyms libxcb-render-util libxcb.so.1 libX11-xcb.so.1 libX11.so.6; do  # Added X11/XCB libs
-            find /usr/lib -name "${lib}.so*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
+          # Bundle XCB and additional Qt dependencies
+          for lib in libxcb-icccm libxcb-image libxcb-keysyms libxcb-render-util libQt5Network.so.5 libQt5Qml.so.5 libQt5Quick.so.5; do
+            find /usr/lib -name "${lib}*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
+            find /usr/lib -name "${lib}*" -exec ldd {} \; | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+              copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
+            done
           done
-          # Bundle additional critical libs
-          cp -v /usr/lib/x86_64-linux-gnu/libstdc++.so.6* "$HOME/qutebrowser-bundle/usr/lib/"  # Ensure latest libstdc++
-          cp -v /lib/x86_64-linux-gnu/libgcc_s.so.1 "$HOME/qutebrowser-bundle/usr/lib/"
-          cp -v /usr/lib/x86_64-linux-gnu/libpthread.so.0 "$HOME/qutebrowser-bundle/usr/lib/"
-          cp -v /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3* "$HOME/qutebrowser-bundle/usr/lib/" || true
+          # Bundle additional critical libs with their dependencies
+          for lib in libstdc++.so.6 libgcc_s.so.1 libpthread.so.0 libdouble-conversion.so.3 libz.so.1 libicui18n.so.66 libicuuc.so.66 libicudata.so.66; do
+            find /usr/lib /lib -name "$lib*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
+            find /usr/lib /lib -name "$lib*" -exec ldd {} \; | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+              copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
+            done
+          done
           # Move Qt plugins and ensure dependencies
           cp -rv "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins/platforms" "$HOME/qutebrowser-bundle/usr/lib/plugins/"
           rm -rf "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5/Qt5/plugins"
@@ -100,12 +107,10 @@ jobs:
               fi
             done
           done
-          # Patch RPATH for all shared libraries (use absolute paths)
-          find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "$HOME/qutebrowser-bundle/glibc:$HOME/qutebrowser-bundle/usr/lib" {} \;
-          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "$HOME/qutebrowser-bundle/glibc:$HOME/qutebrowser-bundle/usr/lib" {} \;
-          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "$HOME/qutebrowser-bundle/glibc:$HOME/qutebrowser-bundle/usr/lib" {} \;
-          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --print-rpath {} \;
-          ldd "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/libqxcb.so" || true
+          # Patch RPATH for all shared libraries
+          find "$HOME/qutebrowser-bundle/usr/lib/" -name "*.so*" -exec patchelf --set-rpath "\$ORIGIN/../glibc:\$ORIGIN" {} \;
+          find "$HOME/qutebrowser-bundle/usr/lib/python3.10/site-packages/PyQt5" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../../../glibc:\$ORIGIN/../../../../lib" {} \;
+          find "$HOME/qutebrowser-bundle/usr/lib/plugins/platforms/" -name "*.so" -exec patchelf --set-rpath "\$ORIGIN/../../glibc:\$ORIGIN/../../lib" {} \;
 
       - name: Extract dynamic linker and glibc from Ubuntu 22.04
         run: |
@@ -160,6 +165,7 @@ jobs:
           export QT_QPA_PLATFORM_PLUGIN_PATH="$BASE_DIR/usr/lib/plugins/platforms"
           export XDG_RUNTIME_DIR="$BASE_DIR/runtime"  # Set runtime dir within bundle
           mkdir -p "$XDG_RUNTIME_DIR"  # Create runtime dir if it doesn't exist
+          chmod 700 "$XDG_RUNTIME_DIR"  # Set proper permissions
           echo "QT_PLUGIN_PATH set to: $QT_PLUGIN_PATH"
           echo "QT_QPA_PLATFORM_PLUGIN_PATH set to: $QT_QPA_PLATFORM_PLUGIN_PATH"
           echo "LD_LIBRARY_PATH set to: $LD_LIBRARY_PATH"
