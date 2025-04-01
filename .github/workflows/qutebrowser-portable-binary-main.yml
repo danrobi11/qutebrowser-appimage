@@ -35,8 +35,9 @@ jobs:
 
       - name: Install Qutebrowser and PyQt5 via pip (user local)
         run: |
-          python3.10 -m pip install --upgrade --no-cache-dir --user qutebrowser pyqt5 pyqtwebengine
+          python3.10 -m pip install --upgrade --no-cache-dir --user qutebrowser pyqt5 pyqtwebengine jinja2
           python3.10 -m pip show qutebrowser || exit 1
+          python3.10 -m pip show jinja2 || exit 1
 
       - name: Copy installed site-packages to bundle
         run: |
