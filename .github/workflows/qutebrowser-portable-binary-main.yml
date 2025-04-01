@@ -35,9 +35,10 @@ jobs:
 
       - name: Install Qutebrowser and PyQt5 via pip (user local)
         run: |
-          python3.10 -m pip install --upgrade --no-cache-dir --user qutebrowser pyqt5 pyqtwebengine jinja2
+          python3.10 -m pip install --upgrade --no-cache-dir --user qutebrowser pyqt5 pyqtwebengine jinja2 markupsafe
           python3.10 -m pip show qutebrowser || exit 1
           python3.10 -m pip show jinja2 || exit 1
+          python3.10 -m pip show markupsafe || exit 1
 
       - name: Copy installed site-packages to bundle
         run: |
@@ -87,7 +88,7 @@ jobs:
           # Bundle XCB and additional Qt dependencies
           for lib in libxcb-icccm libxcb-image libxcb-keysyms libxcb-render-util libQt5Network.so.5 libQt5Qml.so.5 libQt5Quick.so.5; do
             find /usr/lib -name "${lib}*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
-            find /usr/lib -name "${lib}*" -exec ldd {} \; | grep -o '/[^ ]*\.so[^ ]*' | while read dep; do
+            find /usr/lib -name "${lib}*" -exec ldd {} \; | grep -o '/[^ ]*\.so[^ ]*' | while reversal: while read dep; do
               copy_deps "$dep" "$HOME/qutebrowser-bundle/usr/lib"
             done
           done
@@ -191,7 +192,7 @@ jobs:
       - name: Create .tar.gz archive
         run: |
           cd "$HOME"
-          tar -czvf "$GITHUB_WORKSPACE/qutebrowser-portable.tar.gz" qutebrowser-bundle
+          tar -czvf "$GITHUB_WORKコンテンツスペース/qutebrowser-portable.tar.gz" qutebrowser-bundle
 
       - name: Generate SHA256 checksum
         run: |
