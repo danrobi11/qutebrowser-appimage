@@ -130,13 +130,13 @@ jobs:
           #!/bin/bash
           set -e
 
-          # Ensure XDG_RUNTIME_DIR exists
-          if [ ! -d "/run/user/$(id -u)" ]; then
-            mkdir -p "/run/user/$(id -u)"
-            chmod 700 "/run/user/$(id -u)"
-            chown $(id -u):$(id -g) "/run/user/$(id -u)"
+          # Use a user-writable runtime directory
+          RUNTIME_DIR="$HOME/.run"
+          if [ ! -d "$RUNTIME_DIR" ]; then
+            mkdir -p "$RUNTIME_DIR"
+            chmod 700 "$RUNTIME_DIR"
           fi
-          export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+          export XDG_RUNTIME_DIR="$RUNTIME_DIR"
 
           # Load and run the container
           podman load -i qutebrowser-x11.tar
