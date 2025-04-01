@@ -77,7 +77,7 @@ jobs:
             copy_deps "$lib" "$HOME/qutebrowser-bundle/usr/lib"
           done
           # Bundle Qt and PyQt dependencies
-          for lib in libQt5Core libQt5Gui libQt5Widgets libQt5WebEngineCore libQt5WebEngineWidgets; do
+          for lib in libQt5Core libQt5Gui libQt5Widgets libQt5WebEngineCore libQt5WebEngineWidgets libQt5XcbQpa; do
             find /usr/lib -name "${lib}.so*" -exec cp -v {} "$HOME/qutebrowser-bundle/usr/lib/" \;
           done
           # Bundle additional critical libs
@@ -132,7 +132,9 @@ jobs:
         run: |
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libpthread.so.0" || echo "libpthread.so.0 missing!"
           ls -lh "$HOME/qutebrowser-bundle/usr/lib/libdouble-conversion.so.3"* || echo "libdouble-conversion.so.3 missing!"
+          ls -lh "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5"* || echo "libQt5XcbQpa.so.5 missing!"
           ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5Core.so.5" || true
+          ldd "$HOME/qutebrowser-bundle/usr/lib/libQt5XcbQpa.so.5" || true
           ldd "$HOME/qutebrowser-bundle/usr/bin/python3" || true
 
       - name: Write shell launcher
@@ -145,6 +147,7 @@ jobs:
           export LD_LIBRARY_PATH="$BASE_DIR/glibc:$BASE_DIR/lib"
           export PYTHONHOME="$BASE_DIR/usr"
           export PYTHONPATH="$BASE_DIR/usr/lib/python3.10/site-packages"
+          export QT_DEBUG_PLUGINS=1  # Enable Qt plugin debugging
           LINKER="$BASE_DIR/glibc/ld-linux-x86-64.so.2"
           [ -f "$LINKER" ] || { echo "Error: Dynamic linker $LINKER not found"; exit 1; }
           exec "$LINKER" --library-path "$BASE_DIR/glibc:$BASE_DIR/lib" "$DIR/python3" -m qutebrowser "$@"
