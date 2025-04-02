@@ -114,8 +114,9 @@ jobs:
               libstdc++6 \
               && apt-get update && apt-get install -y libxcb-cursor0 \
               && dpkg -l | grep libxcb-cursor0 \
-              && mkdir -p /run/user/1000 /var/run/dbus \
+              && mkdir -p /run/user/1000 /var/run/dbus /usr/share/dbus-1/system-services \
               && chmod 700 /run/user/1000 \
+              && chmod 755 /var/run/dbus \
               && rm -rf /var/lib/apt/lists/*
 
           # Upgrade pip and install qutebrowser dependencies
@@ -140,7 +141,7 @@ jobs:
           WORKDIR /home/user
 
           # Entrypoint with D-Bus and qutebrowser
-          CMD ["bash", "-c", "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 1 && dbus-run-session -- python3 -m qutebrowser"]
+          CMD ["bash", "-c", "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && dbus-run-session -- python3 -m qutebrowser"]
           EOF
 
       - name: Build Podman Container with runc
@@ -260,7 +261,7 @@ jobs:
             --userns=keep-id \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest \
-            bash -c "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+            bash -c "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           EOF
           chmod +x launch-qutebrowser.sh
 
