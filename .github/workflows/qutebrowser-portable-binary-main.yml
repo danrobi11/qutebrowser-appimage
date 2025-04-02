@@ -30,6 +30,7 @@ jobs:
           ENV QTWEBENGINE_DISABLE_SANDBOX=1
           ENV ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf
           ENV DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket
+          ENV QT_MEDIA_BACKEND=gstreamer
 
           # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
@@ -89,12 +90,11 @@ jobs:
               libasound2 \
               libasound2-data \
               alsa-utils \
-              libasound2-plugins \
               dbus \
               dbus-x11 \
               upower \
               ffmpeg \
-              libavcodec-extra \
+              libavcodec58 \
               libavformat58 \
               libavutil56 \
               libswscale5 \
@@ -105,6 +105,8 @@ jobs:
               gstreamer1.0-plugins-bad \
               gstreamer1.0-plugins-ugly \
               gstreamer1.0-libav \
+              gstreamer1.0-vaapi \
+              gstreamer1.0-tools \
               # Fonts and misc
               fontconfig \
               fontconfig-config \
@@ -252,11 +254,11 @@ jobs:
               GPU_ARGS="$GPU_ARGS --group-add $VIDEO_GID --cap-add SYS_ADMIN"
               [ $DEBUG -eq 1 ] && echo "GPU devices found, arguments: $GPU_ARGS"
             else
-              GPU_FALLBACK="--qt-flag disable-gpu"
+              GPU_FALLBACK="--qt-flag disable-gpu --qt-flag disable-accelerated-video-decode"
               [ $DEBUG -eq 1 ] && echo "No valid GPU device files found, falling back to software rendering"
             fi
           else
-            GPU_FALLBACK="--qt-flag disable-gpu"
+            GPU_FALLBACK="--qt-flag disable-gpu --qt-flag disable-accelerated-video-decode"
             [ $DEBUG -eq 1 ] && echo "No GPU devices found, falling back to software rendering"
           fi
 
@@ -270,7 +272,7 @@ jobs:
             sudo podman run --rm -it \
               -e DISPLAY=$DISPLAY \
               -v /tmp/.X11-unix:/tmp/.X11-unix \
-              -v "$HOME:/home/$USERNAME:rw" \
+              -v "$HOME:/home/$USERNAME:rw,z" \
               -e HOME="/home/$USERNAME" \
               -e XDG_RUNTIME_DIR=/run/user/1000 \
               -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
@@ -278,19 +280,20 @@ jobs:
               -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
               -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
               -e ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf \
+              -e QT_MEDIA_BACKEND=gstreamer \
               $AUDIO_ARGS \
               $GPU_ARGS \
               --security-opt label=disable \
               --cap-add=SYS_PTRACE \
               --cap-add=SYS_ADMIN \
               localhost/qutebrowser-x11:latest \
-              bash -c "echo 'pcm.!default { type plug; slave { pcm \"hw:$CARD,0\" } }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card $CARD }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && aplay -l && echo 'Testing audio playback...' && (aplay /usr/share/sounds/alsa/Front_Center.wav || echo 'Audio test failed') && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true -s content.local_content_can_access_remote_urls true $GPU_FALLBACK"
+              bash -c "echo 'pcm.!default { type plug; slave { pcm \"hw:1,0\" } }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card 1 }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && aplay -l && echo 'Testing audio playback...' && (aplay /usr/share/sounds/alsa/Front_Center.wav || echo 'Audio test failed') && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser --debug --loglevel debug -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           else
             # Normal run without debug output
             sudo podman run --rm -it \
               -e DISPLAY=$DISPLAY \
               -v /tmp/.X11-unix:/tmp/.X11-unix \
-              -v "$HOME:/home/$USERNAME:rw" \
+              -v "$HOME:/home/$USERNAME:rw,z" \
               -e HOME="/home/$USERNAME" \
               -e XDG_RUNTIME_DIR=/run/user/1000 \
               -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
@@ -298,13 +301,14 @@ jobs:
               -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
               -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
               -e ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf \
+              -e QT_MEDIA_BACKEND=gstreamer \
               $AUDIO_ARGS \
               $GPU_ARGS \
               --security-opt label=disable \
               --cap-add=SYS_PTRACE \
               --cap-add=SYS_ADMIN \
               localhost/qutebrowser-x11:latest \
-              bash -c "echo 'pcm.!default { type plug; slave { pcm \"hw:$CARD,0\" } }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card $CARD }' >> $HOME/.asoundrc && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true -s content.local_content_can_access_remote_urls true $GPU_FALLBACK"
+              bash -c "echo 'pcm.!default { type plug; slave { pcm \"hw:1,0\" } }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card 1 }' >> $HOME/.asoundrc && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           fi
           EOF
           chmod +x launch-qutebrowser.sh
