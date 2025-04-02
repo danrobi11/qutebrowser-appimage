@@ -24,145 +24,39 @@ jobs:
           cat > Containerfile <<'EOF'
           FROM ubuntu:22.04
 
-          # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
           ENV XDG_RUNTIME_DIR=/run/user/1000
           ENV QTWEBENGINE_DISABLE_SANDBOX=1
-          ENV ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf
-          ENV DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket
 
-          # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
-              python3.10 \
               python3-pip \
-              python3-setuptools \
-              libffi8 \
-              # Qt 6 and WebEngine core
+              qutebrowser \
               libqt6webenginecore6 \
               libqt6webenginewidgets6 \
-              libqt6widgets6 \
               libqt6gui6 \
               libqt6core6 \
               libqt6opengl6 \
               libqt6network6 \
               libqt6dbus6 \
-              libqt6printsupport6 \
-              libqt6qml6 \
-              libqt6qmlmodels6 \
-              libqt6quick6 \
-              libqt6quickwidgets6 \
-              libqt6webchannel6 \
-              # Graphics and X11 dependencies
-              libgl1 \
-              libegl1 \
-              libxkbcommon0 \
-              libfontconfig1 \
-              libx11-6 \
-              libx11-xcb1 \
-              libxcb1 \
-              libxcb-glx0 \
-              libxcb-icccm4 \
-              libxcb-image0 \
-              libxcb-keysyms1 \
-              libxcb-randr0 \
-              libxcb-render0 \
-              libxcb-render-util0 \
-              libxcb-shape0 \
-              libxcb-shm0 \
-              libxcb-sync1 \
-              libxcb-xfixes0 \
-              libxcb-xinerama0 \
-              libxcb-xkb1 \
-              libxcb-cursor0 \
-              libxext6 \
-              libxfixes3 \
-              libxrender1 \
               libgl1-mesa-dri \
               libglx-mesa0 \
+              libx11-xcb1 \
+              libxcb-cursor0 \
               libxkbcommon-x11-0 \
-              # Additional Mesa dependencies for GPU
-              libglapi-mesa \
-              libgbm1 \
-              libegl-mesa0 \
-              mesa-vulkan-drivers \
-              # Audio/Video for WebEngine
               libasound2 \
-              libasound2-data \
-              alsa-utils \
+              libpulse0 \
               dbus \
-              dbus-x11 \
-              upower \
-              ffmpeg \
-              libavcodec58 \
-              libavformat58 \
-              libavutil56 \
-              libswscale5 \
-              libavfilter7 \
-              libavdevice58 \
-              gstreamer1.0-plugins-base \
-              gstreamer1.0-plugins-good \
-              gstreamer1.0-plugins-bad \
-              gstreamer1.0-plugins-ugly \
-              gstreamer1.0-libav \
-              # Fonts and misc
-              fontconfig \
-              fontconfig-config \
-              libfreetype6 \
-              libpng16-16 \
-              libjpeg8 \
-              libdouble-conversion3 \
-              libicu70 \
-              libpcre2-8-0 \
-              libzstd1 \
-              zlib1g \
-              # GLIBC and runtime
-              libc6 \
-              libgcc-s1 \
-              libstdc++6 \
-              && apt-get update && apt-get install -y libxcb-cursor0 \
-              && dpkg -l | grep libxcb-cursor0 \
-              && mkdir -p /run/user/1000 /var/run/dbus \
-              && chmod 700 /run/user/1000 \
-              && chmod 755 /var/run/dbus \
-              && chmod 4755 /usr/lib/dbus-1.0/dbus-daemon-launch-helper \
-              && chmod 4755 /usr/libexec/upowerd \
-              && echo "pcm.!default { type hw; card 0; device 0 }" > /etc/asound.conf \
-              && echo "ctl.!default { type hw; card 0 }" >> /etc/asound.conf \
               && rm -rf /var/lib/apt/lists/*
 
-          # Upgrade pip and install qutebrowser dependencies
-          RUN python3 -m pip install --no-cache-dir --upgrade pip>=23.0 && \
-              python3 -m pip install --no-cache-dir --root-user-action=ignore \
-              qutebrowser \
-              pyqt6 \
-              pyqt6-webengine \
-              jinja2 \
-              markupsafe \
-              pyyaml
+          RUN useradd -m -u 1000 -g 1000 user && \
+              mkdir -p /run/user/1000 && \
+              chown user:user /run/user/1000
 
-          # Create group and user (UID/GID 1000), add to audio and video groups if they don't exist
-          RUN groupadd -g 1000 user && \
-              (getent group audio || groupadd -g 29 audio) && \
-              (getent group video || groupadd -g 44 video) && \
-              useradd -m -u 1000 -g 1000 -G audio,video user && \
-              chown -R user:user /run/user/1000 /var/run/dbus
-
-          # Set runtime user
           USER user
           WORKDIR /home/user
 
-          # Entrypoint with D-Bus, UPower, and qutebrowser
-          CMD ["bash", "-c", "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser"]
+          CMD ["bash", "-c", "dbus-run-session -- python3 -m qutebrowser"]
           EOF
-
-      - name: Build Podman Container with runc
-        run: |
-          sudo podman build --runtime /usr/bin/runc -t qutebrowser-x11:latest -f Containerfile .
-          sudo podman images
-
-      - name: Save Container Image
-        run: |
-          sudo podman save -o qutebrowser-x11.tar qutebrowser-x11:latest
 
       - name: Create Launch Script
         run: |
@@ -170,29 +64,20 @@ jobs:
           #!/bin/bash
           set -e
 
-          # Get the host username and UID/GID
           USERNAME=${USER:-$(whoami)}
           HOST_UID=$(id -u)
           HOST_GID=$(id -g)
           echo "Host username: $USERNAME (UID: $HOST_UID, GID: $HOST_GID)"
 
-          # Set working directory to script location
           SCRIPT_DIR="$(dirname "$(realpath "$0")")"
           cd "$SCRIPT_DIR" || { echo "Failed to cd to $SCRIPT_DIR"; exit 1; }
-          echo "Working directory set to: $(/bin/pwd)"
+          echo "Working directory: $(/bin/pwd)"
 
-          # Use a user-writable runtime directory
           RUNTIME_DIR="$HOME/.run"
-          if [ ! -d "$RUNTIME_DIR" ]; then
-            mkdir -p "$RUNTIME_DIR"
-            chmod 700 "$RUNTIME_DIR"
-            echo "Created runtime dir: $RUNTIME_DIR"
-          fi
+          mkdir -p "$RUNTIME_DIR" && chmod 700 "$RUNTIME_DIR"
           export XDG_RUNTIME_DIR="$RUNTIME_DIR"
-          echo "XDG_RUNTIME_DIR set to: $XDG_RUNTIME_DIR"
+          echo "XDG_RUNTIME_DIR: $XDG_RUNTIME_DIR"
 
-          # Ensure DISPLAY is set and X11 is accessible
-          echo "DISPLAY: $DISPLAY"
           if [ -z "$DISPLAY" ]; then
             echo "DISPLAY unset—trying :0"
             export DISPLAY=:0
@@ -201,71 +86,52 @@ jobs:
             echo "Cannot connect to X server $DISPLAY—run from an X session"
             exit 1
           fi
-
-          # Grant local X11 access
-          echo "Granting local X11 access..."
+          echo "Granting X11 access..."
           xhost +SI:localuser:$USER
-          xhost
 
-          # Load and run the container with full userspace access
           echo "Loading container image..."
-          sudo podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
-          echo "Launching qutebrowser..."
+          podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
 
-          # Debug: Check if home directory contents are visible and readable
-          echo "Checking home directory in container..."
-          sudo podman run --rm -it \
-            -v "$HOME:/home/$USERNAME:rw,z" \
-            -e HOME="/home/$USERNAME" \
-            -e XDG_RUNTIME_DIR=/run/user/1000 \
-            --group-add audio --group-add video \
-            localhost/qutebrowser-x11:latest \
-            bash -c "whoami && id && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
-
-          # Set up audio arguments
           AUDIO_ARGS=""
+          AUDIO_ENV=""
+          AUDIO_GID=$(getent group audio | cut -d: -f3 || echo "29")
           if [ -d "/dev/snd" ]; then
-            echo "ALSA devices found, mapping audio devices"
-            AUDIO_ARGS="--device /dev/snd:/dev/snd --group-add audio --cap-add SYS_ADMIN"
-            echo "Audio arguments: $AUDIO_ARGS"
-            # Debug: List sound devices
-            echo "Host sound devices:"
-            ls -l /dev/snd/*
-            # Dynamically set ALSA card based on available devices
-            CARD=$(ls /dev/snd/controlC* 2>/dev/null | head -n 1 | grep -o 'controlC[0-9]*' | cut -c9- || echo 0)
-            echo "Using ALSA card: $CARD"
+            echo "ALSA devices found"
+            AUDIO_ARGS="--device /dev/snd:/dev/snd --group-add $AUDIO_GID"
+            if [ -d "/run/user/$HOST_UID/pulse" ]; then
+              echo "PulseAudio socket found, using PulseAudio"
+              AUDIO_ARGS="$AUDIO_ARGS -v /run/user/$HOST_UID/pulse:/run/user/1000/pulse"
+            else
+              echo "PulseAudio not found, falling back to ALSA"
+              AUDIO_ENV="-e QT_MULTIMEDIA_PREFERRED_PLUGINS=alsa"
+            fi
           else
-            echo "No ALSA devices found, audio may not work"
+            echo "No audio devices found, sound may not work"
           fi
 
-          # Set up GPU arguments with fallback
           GPU_ARGS=""
           GPU_FALLBACK=""
+          GPU_GID=$(getent group video | cut -d: -f3 || echo "44")
           if [ -d "/dev/dri" ]; then
-            echo "GPU devices found, mapping /dev/dri devices"
+            echo "GPU devices found"
             for dri_dev in /dev/dri/card0 /dev/dri/renderD128; do
               if [ -e "$dri_dev" ]; then
                 GPU_ARGS="$GPU_ARGS --device $dri_dev"
-                echo "Mapped GPU device: $dri_dev"
               fi
             done
-            # Debug: List GPU devices
-            echo "Host GPU devices:"
-            ls -l /dev/dri/*
             if [ -n "$GPU_ARGS" ]; then
-              GPU_ARGS="$GPU_ARGS --group-add video --cap-add SYS_ADMIN"
-              echo "GPU arguments: $GPU_ARGS"
+              GPU_ARGS="$GPU_ARGS --group-add $GPU_GID"
             else
-              echo "No valid GPU device files found, falling back to software rendering"
+              echo "No valid GPU devices, using software rendering"
               GPU_FALLBACK="--qt-flag disable-gpu"
             fi
           else
-            echo "No GPU devices found, falling back to software rendering"
+            echo "No GPU devices, using software rendering"
             GPU_FALLBACK="--qt-flag disable-gpu"
           fi
 
-          # Run qutebrowser with full userspace access, GPU, and audio
-          sudo podman run --rm -it \
+          echo "Launching qutebrowser..."
+          podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
             -v "$HOME:/home/$USERNAME:rw,z" \
@@ -274,21 +140,35 @@ jobs:
             -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
             -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
             -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
-            -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
             $AUDIO_ARGS \
+            $AUDIO_ENV \
             $GPU_ARGS \
+            --userns=keep-id \
             --security-opt label=disable \
-            --cap-add=SYS_PTRACE \
-            --cap-add=SYS_ADMIN \
             localhost/qutebrowser-x11:latest \
-            bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+            --set content.local_content_can_access_file_urls true \
+            $GPU_FALLBACK
           EOF
           chmod +x launch-qutebrowser.sh
+
+      - name: Build Podman Container
+        run: |
+          sudo podman build --runtime /usr/bin/runc -t qutebrowser-x11:latest -f Containerfile .
+          sudo podman images
+
+      - name: Save Container Image
+        run: |
+          sudo podman save -o qutebrowser-x11.tar qutebrowser-x11:latest
 
       - name: Generate SHA256 Checksum
         run: |
           sha256sum qutebrowser-x11.tar > qutebrowser-x11.tar.sha256
           cat qutebrowser-x11.tar.sha256
+
+      - name: Test Container (Basic)
+        run: |
+          sudo podman run --rm localhost/qutebrowser-x11:latest --version
+          echo "Container runs and qutebrowser version printed successfully"
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
