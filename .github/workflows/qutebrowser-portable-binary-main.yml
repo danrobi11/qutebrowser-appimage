@@ -27,7 +27,6 @@ jobs:
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
           ENV XDG_RUNTIME_DIR=/run/user/1000
-          ENV PULSE_SERVER=unix:/run/user/1000/pulse/native
 
           # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
@@ -205,6 +204,16 @@ jobs:
             localhost/qutebrowser-x11:latest \
             bash -c "whoami && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
+          # Detect PulseAudio socket or fall back to ALSA
+          PULSE_SOCKET="/run/user/$(id -u)/pulse/native"
+          if [ -S "$PULSE_SOCKET" ]; then
+            echo "PulseAudio socket found at $PULSE_SOCKET"
+            PULSE_ARGS="-e PULSE_SERVER=unix:/run/user/1000/pulse/native -v $PULSE_SOCKET:/run/user/1000/pulse/native:rw"
+          else
+            echo "No PulseAudio socket found, falling back to ALSA"
+            PULSE_ARGS="-v /dev/snd:/dev/snd"
+          fi
+
           # Run qutebrowser with full userspace access and audio
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
@@ -215,9 +224,7 @@ jobs:
             -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
             -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
             -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
-            -e PULSE_SERVER=unix:/run/user/1000/pulse/native \
-            -v /run/user/$(id -u)/pulse:/run/user/1000/pulse:rw \
-            -v /dev/snd:/dev/snd \
+            $PULSE_ARGS \
             --userns=keep-id \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest \
