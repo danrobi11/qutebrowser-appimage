@@ -234,11 +234,11 @@ jobs:
               echo "GPU arguments: $GPU_ARGS"
             else
               echo "No valid GPU device files found, falling back to software rendering"
-              GPU_FALLBACK="--disable-gpu"
+              GPU_FALLBACK="--qt-flag disable-gpu"
             fi
           else
             echo "No GPU devices found, falling back to software rendering"
-            GPU_FALLBACK="--disable-gpu"
+            GPU_FALLBACK="--qt-flag disable-gpu"
           fi
 
           # Run qutebrowser with full userspace access, GPU, and audio
