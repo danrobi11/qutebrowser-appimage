@@ -139,6 +139,10 @@ jobs:
           #!/bin/bash
           set -e
 
+          # Get the host username
+          USERNAME=${USER:-$(whoami)}
+          echo "Host username: $USERNAME"
+
           # Set working directory to script location
           SCRIPT_DIR="$(dirname "$(realpath "$0")")"
           cd "$SCRIPT_DIR" || { echo "Failed to cd to $SCRIPT_DIR"; exit 1; }
@@ -178,22 +182,22 @@ jobs:
           # Debug: Check if home directory contents are visible and readable
           echo "Checking home directory in container..."
           podman run --rm -it \
-            -v "$HOME:/home/user:rw,z" \
-            -e HOME=/home/user \
+            -v "$HOME:/home/$USERNAME:rw,z" \
+            -e HOME="/home/$USERNAME" \
             --userns=keep-id \
             localhost/qutebrowser-x11:latest \
-            bash -c "whoami && ls -l /home/user && cat /home/user/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
+            bash -c "whoami && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
           # Run qutebrowser with full userspace access
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
-            -v "$HOME:/home/user:rw,z" \
-            -e HOME=/home/user \
+            -v "$HOME:/home/$USERNAME:rw,z" \
+            -e HOME="/home/$USERNAME" \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
-            -e XDG_CONFIG_HOME=/home/user/.config \
-            -e XDG_DATA_HOME=/home/user/.local/share \
-            -e XDG_CACHE_HOME=/home/user/.cache \
+            -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
+            -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
+            -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
             --userns=keep-id \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest \
