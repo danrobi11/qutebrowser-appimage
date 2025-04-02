@@ -30,6 +30,7 @@ jobs:
           ENV QTWEBENGINE_DISABLE_SANDBOX=1
           ENV ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf
           ENV DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket
+          ENV QT_MEDIA_BACKEND=gstreamer
 
           # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
@@ -277,13 +278,14 @@ jobs:
               -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
               -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
               -e ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf \
+              -e QT_MEDIA_BACKEND=gstreamer \
               $AUDIO_ARGS \
               $GPU_ARGS \
               --security-opt label=disable \
               --cap-add=SYS_PTRACE \
               --cap-add=SYS_ADMIN \
               localhost/qutebrowser-x11:latest \
-              bash -c "echo 'pcm.!default { type plug; slave { pcm \"hw:1,0\" } }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card 1 }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && aplay -l && echo 'Testing audio playback...' && (aplay /usr/share/sounds/alsa/Front_Center.wav || echo 'Audio test failed') && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+              bash -c "echo 'pcm.!default { type plug; slave { pcm \"hw:1,0\" } }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card 1 }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && aplay -l && echo 'Testing audio playback...' && (aplay /usr/share/sounds/alsa/Front_Center.wav || echo 'Audio test failed') && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser --debug --loglevel DEBUG -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           else
             # Normal run without debug output
             sudo podman run --rm -it \
@@ -297,6 +299,7 @@ jobs:
               -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
               -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
               -e ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf \
+              -e QT_MEDIA_BACKEND=gstreamer \
               $AUDIO_ARGS \
               $GPU_ARGS \
               --security-opt label=disable \
