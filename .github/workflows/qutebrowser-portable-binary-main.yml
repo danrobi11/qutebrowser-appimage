@@ -226,6 +226,12 @@ jobs:
             echo "ALSA devices found, mapping audio devices"
             AUDIO_ARGS="--device /dev/snd:/dev/snd --group-add audio --cap-add SYS_ADMIN"
             echo "Audio arguments: $AUDIO_ARGS"
+            # Debug: List sound devices
+            echo "Host sound devices:"
+            ls -l /dev/snd/*
+            # Dynamically set ALSA card based on available devices
+            CARD=$(ls /dev/snd/controlC* 2>/dev/null | head -n 1 | grep -o 'controlC[0-9]*' | cut -c9- || echo 0)
+            echo "Using ALSA card: $CARD"
           else
             echo "No ALSA devices found, audio may not work"
           fi
@@ -235,13 +241,16 @@ jobs:
           GPU_FALLBACK=""
           if [ -d "/dev/dri" ]; then
             echo "GPU devices found, mapping /dev/dri devices"
-            for dri_dev in /dev/dri/*; do
-              # Only map device files, not directories like by-path
+            # Explicitly map common GPU device files
+            for dri_dev in /dev/dri/card0 /dev/dri/renderD128; do
               if [ -f "$dri_dev" ]; then
                 GPU_ARGS="$GPU_ARGS --device $dri_dev:$dri_dev"
                 echo "Mapped GPU device: $dri_dev"
               fi
             done
+            # Debug: List GPU devices
+            echo "Host GPU devices:"
+            ls -l /dev/dri/*
             if [ -n "$GPU_ARGS" ]; then
               GPU_ARGS="$GPU_ARGS --group-add video --cap-add SYS_ADMIN"
               echo "GPU arguments: $GPU_ARGS"
@@ -272,7 +281,7 @@ jobs:
             --cap-add=SYS_PTRACE \
             --cap-add=SYS_ADMIN \
             localhost/qutebrowser-x11:latest \
-            bash -c "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+            bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > /etc/asound.conf && echo 'ctl.!default { type hw; card '$CARD' }' >> /etc/asound.conf && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           EOF
           chmod +x launch-qutebrowser.sh
 
