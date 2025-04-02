@@ -26,6 +26,7 @@ jobs:
 
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
+          ENV XDG_RUNTIME_DIR=/run/user/1000
 
           # Install base dependencies with Qt 6 and xcb-cursor0
           RUN apt update && apt install -y \
@@ -75,6 +76,9 @@ jobs:
               libxrender1 \
               libgl1-mesa-dri \
               libglx-mesa0 \
+              # Additional Qt/XCB dependencies
+              libqt6x11extras6 \
+              libxkbcommon-x11-0 \
               # Audio/Video for WebEngine
               libasound2 \
               libpulse0 \
@@ -94,6 +98,8 @@ jobs:
               libstdc++6 \
               && apt-get update && apt-get install -y libxcb-cursor0 \
               && dpkg -l | grep libxcb-cursor0 \
+              && mkdir -p /run/user/1000 \
+              && chmod 700 /run/user/1000 \
               && rm -rf /var/lib/apt/lists/*
 
           # Upgrade pip and install qutebrowser dependencies
@@ -108,7 +114,8 @@ jobs:
 
           # Create group and user (UID/GID 1000)
           RUN groupadd -g 1000 user && \
-              useradd -m -u 1000 -g 1000 user
+              useradd -m -u 1000 -g 1000 user && \
+              chown user:user /run/user/1000
 
           # Set runtime user
           USER user
@@ -173,6 +180,7 @@ jobs:
             -v /tmp/.X11-unix:/tmp/.X11-unix \
             -v "$HOME:/home/user:rw" \
             -e HOME=/home/user \
+            -e XDG_RUNTIME_DIR=/run/user/1000 \
             --userns=keep-id \
             localhost/qutebrowser-x11:latest
           EOF
