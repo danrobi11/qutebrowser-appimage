@@ -28,6 +28,7 @@ jobs:
           ENV DEBIAN_FRONTEND=noninteractive
           ENV XDG_RUNTIME_DIR=/run/user/1000
           ENV QTWEBENGINE_DISABLE_SANDBOX=1
+          ENV ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf
 
           # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
@@ -112,7 +113,7 @@ jobs:
               libstdc++6 \
               && apt-get update && apt-get install -y libxcb-cursor0 \
               && dpkg -l | grep libxcb-cursor0 \
-              && mkdir -p /run/user/1000 /run/dbus \
+              && mkdir -p /run/user/1000 /var/run/dbus \
               && chmod 700 /run/user/1000 \
               && rm -rf /var/lib/apt/lists/*
 
@@ -131,14 +132,14 @@ jobs:
               (getent group audio || groupadd -g 29 audio) && \
               (getent group video || groupadd -g 44 video) && \
               useradd -m -u 1000 -g 1000 -G audio,video user && \
-              chown -R user:user /run/user/1000 /run/dbus
+              chown -R user:user /run/user/1000 /var/run/dbus
 
           # Set runtime user
           USER user
           WORKDIR /home/user
 
           # Entrypoint with D-Bus and qutebrowser
-          CMD ["bash", "-c", "dbus-daemon --system && dbus-run-session -- python3 -m qutebrowser"]
+          CMD ["bash", "-c", "dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 1 && dbus-run-session -- python3 -m qutebrowser"]
           EOF
 
       - name: Build Podman Container with runc
@@ -253,13 +254,13 @@ jobs:
             -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
             -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
             -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
-            -v /run/dbus:/run/dbus \
+            -v /var/run/dbus:/var/run/dbus \
             $AUDIO_ARGS \
             $GPU_ARGS \
             --userns=keep-id \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest \
-            bash -c "dbus-daemon --system & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+            bash -c "dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           EOF
           chmod +x launch-qutebrowser.sh
 
