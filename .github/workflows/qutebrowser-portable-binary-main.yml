@@ -140,10 +140,10 @@ jobs:
               markupsafe \
               pyyaml
 
-          # Create group and user (UID/GID 1000), add to audio and video groups with default GIDs
-          RUN groupadd -f -g 1000 user && \
-              (groupadd -f -g 29 audio || true) && \
-              (groupadd -f -g 44 video || true) && \
+          # Create group and user (UID/GID 1000), add to audio and video groups with default GIDs if they don't exist
+          RUN groupadd -g 1000 user && \
+              (getent group audio || groupadd -g 29 audio) && \
+              (getent group video || groupadd -g 44 video) && \
               useradd -m -u 1000 -g 1000 -G audio,video user && \
               chown -R user:user /run/user/1000 /var/run/dbus
 
