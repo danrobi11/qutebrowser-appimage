@@ -140,10 +140,10 @@ jobs:
               markupsafe \
               pyyaml
 
-          # Create group and user (UID/GID 1000), add to audio and video groups if they don't exist
+          # Create group and user (UID/GID 1000), add to audio and video groups with default GIDs
           RUN groupadd -g 1000 user && \
-              (getent group audio || groupadd -g 29 audio) && \
-              (getent group video || groupadd -g 44 video) && \
+              groupadd -g 29 audio && \
+              groupadd -g 44 video && \
               useradd -m -u 1000 -g 1000 -G audio,video user && \
               chown -R user:user /run/user/1000 /var/run/dbus
 
@@ -170,130 +170,135 @@ jobs:
           #!/bin/bash
           set -e
 
+          # Optional debug flag (e.g., run with --debug to see detailed output)
+          DEBUG=0
+          if [ "$1" = "--debug" ]; then
+            DEBUG=1
+          fi
+
           # Get the host username and UID/GID
           USERNAME=${USER:-$(whoami)}
           HOST_UID=$(id -u)
           HOST_GID=$(id -g)
-          echo "Host username: $USERNAME (UID: $HOST_UID, GID: $HOST_GID)"
+          [ $DEBUG -eq 1 ] && echo "Host username: $USERNAME (UID: $HOST_UID, GID: $HOST_GID)"
 
           # Set working directory to script location
           SCRIPT_DIR="$(dirname "$(realpath "$0")")"
           cd "$SCRIPT_DIR" || { echo "Failed to cd to $SCRIPT_DIR"; exit 1; }
-          echo "Working directory set to: $(/bin/pwd)"
+          [ $DEBUG -eq 1 ] && echo "Working directory set to: $(/bin/pwd)"
 
           # Use a user-writable runtime directory
           RUNTIME_DIR="$HOME/.run"
           if [ ! -d "$RUNTIME_DIR" ]; then
             mkdir -p "$RUNTIME_DIR"
             chmod 700 "$RUNTIME_DIR"
-            echo "Created runtime dir: $RUNTIME_DIR"
+            [ $DEBUG -eq 1 ] && echo "Created runtime dir: $RUNTIME_DIR"
           fi
           export XDG_RUNTIME_DIR="$RUNTIME_DIR"
-          echo "XDG_RUNTIME_DIR set to: $XDG_RUNTIME_DIR"
+          [ $DEBUG -eq 1 ] && echo "XDG_RUNTIME_DIR set to: $XDG_RUNTIME_DIR"
 
           # Ensure DISPLAY is set and X11 is accessible
-          echo "DISPLAY: $DISPLAY"
           if [ -z "$DISPLAY" ]; then
-            echo "DISPLAY unset—trying :0"
             export DISPLAY=:0
+            [ $DEBUG -eq 1 ] && echo "DISPLAY unset—set to :0"
           fi
           if ! xset q >/dev/null 2>&1; then
             echo "Cannot connect to X server $DISPLAY—run from an X session"
             exit 1
           fi
+          [ $DEBUG -eq 1 ] && echo "DISPLAY: $DISPLAY"
 
           # Grant local X11 access
-          echo "Granting local X11 access..."
-          xhost +SI:localuser:$USER
-          xhost
+          xhost +SI:localuser:$USER >/dev/null 2>&1
+          [ $DEBUG -eq 1 ] && echo "Granted local X11 access for $USER"
 
           # Detect host audio and video group IDs dynamically
           AUDIO_GID=$(getent group audio | cut -d: -f3 || echo 29)
           VIDEO_GID=$(getent group video | cut -d: -f3 || echo 44)
-          echo "Detected host audio group ID: $AUDIO_GID"
-          echo "Detected host video group ID: $VIDEO_GID"
+          [ $DEBUG -eq 1 ] && echo "Detected host audio group ID: $AUDIO_GID"
+          [ $DEBUG -eq 1 ] && echo "Detected host video group ID: $VIDEO_GID"
 
-          # Load and run the container with full userspace access
-          echo "Loading container image..."
-          sudo podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
-          echo "Launching qutebrowser..."
-
-          # Debug: Host device info
-          echo "Host GPU devices:"
-          ls -l /dev/dri/* 2>/dev/null || echo "No GPU devices found on host"
-          echo "Host sound devices:"
-          ls -l /dev/snd/* 2>/dev/null || echo "No sound devices found on host"
-
-          # Debug: Check if home directory contents are visible and readable
-          echo "Checking home directory in container..."
-          sudo podman run --rm -it \
-            -v "$HOME:/home/$USERNAME:rw,z" \
-            -e HOME="/home/$USERNAME" \
-            -e XDG_RUNTIME_DIR=/run/user/1000 \
-            --group-add "$AUDIO_GID" --group-add "$VIDEO_GID" \
-            localhost/qutebrowser-x11:latest \
-            bash -c "whoami && id && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
+          # Load the container image
+          sudo podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar" >/dev/null 2>&1
+          [ $DEBUG -eq 1 ] && echo "Loaded container image: localhost/qutebrowser-x11:latest"
 
           # Set up audio arguments
           AUDIO_ARGS=""
           if [ -d "/dev/snd" ]; then
-            echo "ALSA devices found, mapping audio devices"
             AUDIO_ARGS="--device /dev/snd:/dev/snd --group-add $AUDIO_GID --cap-add SYS_ADMIN"
-            echo "Audio arguments: $AUDIO_ARGS"
-            # Debug: List sound devices
-            echo "Host sound devices (pre-run):"
-            ls -l /dev/snd/*
-            # Dynamically set ALSA card based on available devices
+            # Dynamically set ALSA card
             CARD=$(ls /dev/snd/controlC* 2>/dev/null | head -n 1 | grep -o 'controlC[0-9]*' | cut -c9- || echo 0)
-            echo "Using ALSA card: $CARD"
+            [ $DEBUG -eq 1 ] && echo "ALSA devices found, using card: $CARD"
+            [ $DEBUG -eq 1 ] && echo "Audio arguments: $AUDIO_ARGS"
           else
-            echo "No ALSA devices found, audio may not work"
+            [ $DEBUG -eq 1 ] && echo "No ALSA devices found, audio may not work"
           fi
 
           # Set up GPU arguments with fallback
           GPU_ARGS=""
           GPU_FALLBACK=""
           if [ -d "/dev/dri" ]; then
-            echo "GPU devices found, mapping /dev/dri devices"
             for dri_dev in /dev/dri/card0 /dev/dri/renderD128; do
               if [ -e "$dri_dev" ]; then
                 GPU_ARGS="$GPU_ARGS --device $dri_dev"
-                echo "Mapped GPU device: $dri_dev"
               fi
             done
-            # Debug: List GPU devices
-            echo "Host GPU devices (pre-run):"
-            ls -l /dev/dri/*
             if [ -n "$GPU_ARGS" ]; then
               GPU_ARGS="$GPU_ARGS --group-add $VIDEO_GID --cap-add SYS_ADMIN"
-              echo "GPU arguments: $GPU_ARGS"
+              [ $DEBUG -eq 1 ] && echo "GPU devices found, arguments: $GPU_ARGS"
             else
-              echo "No valid GPU device files found, falling back to software rendering"
               GPU_FALLBACK="--qt-flag disable-gpu"
+              [ $DEBUG -eq 1 ] && echo "No valid GPU device files found, falling back to software rendering"
             fi
           else
-            echo "No GPU devices found, falling back to software rendering"
             GPU_FALLBACK="--qt-flag disable-gpu"
+            [ $DEBUG -eq 1 ] && echo "No GPU devices found, falling back to software rendering"
           fi
 
-          # Run qutebrowser with full userspace access, GPU, and audio
-          sudo podman run --rm -it \
-            -e DISPLAY=$DISPLAY \
-            -v /tmp/.X11-unix:/tmp/.X11-unix \
-            -v "$HOME:/home/$USERNAME:rw,z" \
-            -e HOME="/home/$USERNAME" \
-            -e XDG_RUNTIME_DIR=/run/user/1000 \
-            -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
-            -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
-            -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
-            -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
-            $AUDIO_ARGS \
-            $GPU_ARGS \
-            --security-opt label=disable \
-            --cap-add=SYS_PTRACE \
-            --cap-add=SYS_ADMIN \
-            localhost/qutebrowser-x11:latest \
-            bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+          # Debug: Host and container device info (optional)
+          if [ $DEBUG -eq 1 ]; then
+            echo "Host GPU devices:"
+            ls -l /dev/dri/* 2>/dev/null || echo "No GPU devices found on host"
+            echo "Host sound devices:"
+            ls -l /dev/snd/* 2>/dev/null || echo "No sound devices found on host"
+            echo "Launching qutebrowser with debug output..."
+            sudo podman run --rm -it \
+              -e DISPLAY=$DISPLAY \
+              -v /tmp/.X11-unix:/tmp/.X11-unix \
+              -v "$HOME:/home/$USERNAME:rw,z" \
+              -e HOME="/home/$USERNAME" \
+              -e XDG_RUNTIME_DIR=/run/user/1000 \
+              -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
+              -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
+              -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
+              -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
+              $AUDIO_ARGS \
+              $GPU_ARGS \
+              --security-opt label=disable \
+              --cap-add=SYS_PTRACE \
+              --cap-add=SYS_ADMIN \
+              localhost/qutebrowser-x11:latest \
+              bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+          else
+            # Normal run without debug output
+            sudo podman run --rm -it \
+              -e DISPLAY=$DISPLAY \
+              -v /tmp/.X11-unix:/tmp/.X11-unix \
+              -v "$HOME:/home/$USERNAME:rw,z" \
+              -e HOME="/home/$USERNAME" \
+              -e XDG_RUNTIME_DIR=/run/user/1000 \
+              -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
+              -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
+              -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
+              -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
+              $AUDIO_ARGS \
+              $GPU_ARGS \
+              --security-opt label=disable \
+              --cap-add=SYS_PTRACE \
+              --cap-add=SYS_ADMIN \
+              localhost/qutebrowser-x11:latest \
+              bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+          fi
           EOF
           chmod +x launch-qutebrowser.sh
 
