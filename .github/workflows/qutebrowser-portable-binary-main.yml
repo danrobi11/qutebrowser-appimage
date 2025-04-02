@@ -85,7 +85,6 @@ jobs:
               libavformat58 \
               libavutil56 \
               libswscale5 \
-              libavresample4 \
               # Fonts and misc
               fontconfig \
               fontconfig-config \
