@@ -175,7 +175,7 @@ jobs:
             -v /:/host:ro \
             -v "$HOME:/home/user:rw,z" \
             localhost/qutebrowser-x11:latest \
-            bash -c "ls -l /home/user && head -n 1 /home/user/build-error-report.txt || echo 'Cannot read files in home directory'"
+            bash -c "ls -l /home/user && cat /home/user/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
           # Run qutebrowser with full system access
           podman run --rm -it \
@@ -190,9 +190,8 @@ jobs:
             -e XDG_CONFIG_HOME=/home/user/.config \
             -e XDG_DATA_HOME=/home/user/.local/share \
             -e XDG_CACHE_HOME=/home/user/.cache \
-            --qt-arg chromium --no-sandbox \
             --security-opt label=disable \
-            localhost/qutebrowser-x11:latest
+            localhost/qutebrowser-x11:latest --qt-arg chromium --no-sandbox
           EOF
           chmod +x launch-qutebrowser.sh
 
