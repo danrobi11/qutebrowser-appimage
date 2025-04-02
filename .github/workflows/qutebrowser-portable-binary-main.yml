@@ -209,13 +209,13 @@ jobs:
           GPU_ARGS=""
           if [ -d "/dev/snd" ]; then
             echo "ALSA devices found, mapping audio directories"
-            AUDIO_ARGS="-v /dev/snd:/dev/snd -v /sys/class/sound:/sys/class/sound --group-add audio"
+            AUDIO_ARGS="-v /dev/snd:/dev/snd -v /sys/class/sound:/sys/class/sound -v /usr/share/alsa:/usr/share/alsa --group-add audio --cap-add SYS_ADMIN"
           else
             echo "No ALSA devices found, audio may not work"
           fi
           if [ -d "/dev/dri" ]; then
             echo "GPU devices found, mapping /dev/dri"
-            GPU_ARGS="--device /dev/dri:/dev/dri --group-add video"
+            GPU_ARGS="--device /dev/dri:/dev/dri --group-add video --cap-add SYS_ADMIN"
           else
             echo "No GPU devices found, video may not work"
           fi
