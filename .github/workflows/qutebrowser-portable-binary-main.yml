@@ -130,7 +130,6 @@ jobs:
           CMD ["python3", "-m", "qutebrowser"]
           EOF
 
-      -b
       - name: Build Podman Container with runc
         run: |
           sudo podman build --runtime /usr/bin/runc -t qutebrowser-x11:latest -f Containerfile .
