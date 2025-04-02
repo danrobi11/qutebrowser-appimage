@@ -80,6 +80,11 @@ jobs:
               libgl1-mesa-dri \
               libglx-mesa0 \
               libxkbcommon-x11-0 \
+              # Additional Mesa dependencies for GPU
+              libglapi-mesa \
+              libgbm1 \
+              libegl-mesa0 \
+              mesa-vulkan-drivers \
               # Audio/Video for WebEngine
               libasound2 \
               alsa-utils \
@@ -119,6 +124,8 @@ jobs:
               && chmod 700 /run/user/1000 \
               && chmod 755 /var/run/dbus \
               && chmod 4755 /usr/lib/dbus-1.0/dbus-daemon-launch-helper \
+              && chmod 4755 /usr/lib/upower/upowerd \
+              && echo "default-server = /dev/snd" > /etc/asound.conf \
               && rm -rf /var/lib/apt/lists/*
 
           # Upgrade pip and install qutebrowser dependencies
@@ -214,11 +221,8 @@ jobs:
           # Set up audio arguments
           AUDIO_ARGS=""
           if [ -d "/dev/snd" ]; then
-            echo "ALSA devices found, mapping audio directories"
-            AUDIO_ARGS="-v /dev/snd:/dev/snd -v /sys/class/sound:/sys/class/sound -v /usr/share/alsa:/usr/share/alsa"
-            [ -f "/etc/asound.conf" ] && AUDIO_ARGS="$AUDIO_ARGS -v /etc/asound.conf:/etc/asound.conf" && echo "Mapped /etc/asound.conf"
-            [ -d "/var/lib/alsa" ] && AUDIO_ARGS="$AUDIO_ARGS -v /var/lib/alsa:/var/lib/alsa" && echo "Mapped /var/lib/alsa"
-            AUDIO_ARGS="$AUDIO_ARGS --group-add audio --cap-add SYS_ADMIN"
+            echo "ALSA devices found, mapping audio devices"
+            AUDIO_ARGS="--device /dev/snd:/dev/snd --group-add audio --cap-add SYS_ADMIN"
             echo "Audio arguments: $AUDIO_ARGS"
           else
             echo "No ALSA devices found, audio may not work"
