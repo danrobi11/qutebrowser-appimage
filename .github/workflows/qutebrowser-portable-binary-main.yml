@@ -28,7 +28,7 @@ jobs:
           ENV DEBIAN_FRONTEND=noninteractive
           ENV XDG_RUNTIME_DIR=/run/user/1000
 
-          # Install base dependencies with Qt 6, xcb-cursor0, and video codecs
+          # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
               python3.10 \
               python3-pip \
@@ -80,11 +80,15 @@ jobs:
               # Audio/Video for WebEngine
               libasound2 \
               libpulse0 \
-              # Video codec dependencies for MP4 playback
+              ffmpeg \
               libavcodec58 \
               libavformat58 \
               libavutil56 \
               libswscale5 \
+              gstreamer1.0-plugins-base \
+              gstreamer1.0-plugins-good \
+              gstreamer1.0-plugins-bad \
+              gstreamer1.0-libav \
               # Fonts and misc
               fontconfig \
               fontconfig-config \
@@ -206,6 +210,7 @@ jobs:
             -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
             --userns=keep-id \
             --security-opt label=disable \
+            --device /dev/snd \
             localhost/qutebrowser-x11:latest \
             python3 -m qutebrowser -s content.local_content_can_access_file_urls true
           EOF
