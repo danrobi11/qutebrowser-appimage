@@ -76,8 +76,6 @@ jobs:
               libxrender1 \
               libgl1-mesa-dri \
               libglx-mesa0 \
-              # Additional Qt/XCB dependencies
-              libqt6x11extras6 \
               libxkbcommon-x11-0 \
               # Audio/Video for WebEngine
               libasound2 \
