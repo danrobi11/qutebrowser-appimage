@@ -223,13 +223,19 @@ jobs:
           if [ -d "/dev/dri" ]; then
             echo "GPU devices found, mapping /dev/dri devices"
             for dri_dev in /dev/dri/*; do
-              if [ -e "$dri_dev" ]; then
+              # Only map device files, not directories like by-path
+              if [ -f "$dri_dev" ]; then
                 GPU_ARGS="$GPU_ARGS --device $dri_dev:$dri_dev"
                 echo "Mapped GPU device: $dri_dev"
               fi
             done
-            GPU_ARGS="$GPU_ARGS --group-add video --cap-add SYS_ADMIN"
-            echo "GPU arguments: $GPU_ARGS"
+            if [ -n "$GPU_ARGS" ]; then
+              GPU_ARGS="$GPU_ARGS --group-add video --cap-add SYS_ADMIN"
+              echo "GPU arguments: $GPU_ARGS"
+            else
+              echo "No valid GPU device files found, falling back to software rendering"
+              GPU_FALLBACK="--disable-gpu"
+            fi
           else
             echo "No GPU devices found, falling back to software rendering"
             GPU_FALLBACK="--disable-gpu"
