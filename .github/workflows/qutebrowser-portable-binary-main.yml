@@ -111,14 +111,8 @@ jobs:
               markupsafe \
               pyyaml
 
-          # Create group and user (UID/GID 1000)
-          RUN groupadd -g 1000 user && \
-              useradd -m -u 1000 -g 1000 user && \
-              chown user:user /run/user/1000
-
-          # Set runtime user
-          USER user
-          WORKDIR /home/user
+          # No specific user, run as root
+          WORKDIR /root
 
           # Entrypoint
           CMD ["python3", "-m", "qutebrowser"]
@@ -170,7 +164,7 @@ jobs:
           xhost +SI:localuser:$USER
           xhost
 
-          # Load and run the container with full userspace access
+          # Load and run the container with full system access
           echo "Loading container image..."
           podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
           echo "Launching qutebrowser..."
@@ -178,23 +172,21 @@ jobs:
           # Debug: Check if the file is visible in the container
           echo "Checking for file in container..."
           podman run --rm -it \
-            -v "$HOME:/home/user:rw,z" \
-            -e HOME=/home/user \
+            -v /:/host:ro \
             localhost/qutebrowser-x11:latest \
-            bash -c "ls -l /home/user/Videos-Youtube-Downloads/Activate-superword-mode-in-the-Emacs-Minibuffer-coding-programming-WqN27ltSwag.mp4 || echo 'File not found in container'"
+            bash -c "ls -l /host/home/danrobi/Videos-Youtube-Downloads/Activate-superword-mode-in-the-Emacs-Minibuffer-coding-programming-WqN27ltSwag.mp4 || echo 'File not found in container'"
 
-          # Run qutebrowser
+          # Run qutebrowser with full system access
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
-            -v "$HOME:/home/user:rw,z" \
-            -v /run/dbus:/run/dbus:ro \
-            -e HOME=/home/user \
+            -v /:/host:ro \
+            -v "$HOME:/home/danrobi:rw,z" \
+            -e HOME=/home/danrobi \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
-            -e XDG_CONFIG_HOME=/home/user/.config \
-            -e XDG_DATA_HOME=/home/user/.local/share \
-            -e XDG_CACHE_HOME=/home/user/.cache \
-            --userns=keep-id \
+            -e XDG_CONFIG_HOME=/home/danrobi/.config \
+            -e XDG_DATA_HOME=/home/danrobi/.local/share \
+            -e XDG_CACHE_HOME=/home/danrobi/.cache \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest
           EOF
