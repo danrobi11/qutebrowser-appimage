@@ -27,6 +27,7 @@ jobs:
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
           ENV XDG_RUNTIME_DIR=/run/user/1000
+          ENV QTWEBENGINE_DISABLE_SANDBOX=1
 
           # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
@@ -81,6 +82,7 @@ jobs:
               libasound2 \
               alsa-utils \
               dbus \
+              dbus-x11 \
               ffmpeg \
               libavcodec58 \
               libavformat58 \
@@ -136,7 +138,7 @@ jobs:
           WORKDIR /home/user
 
           # Entrypoint with D-Bus and qutebrowser
-          CMD ["bash", "-c", "dbus-run-session -- python3 -m qutebrowser"]
+          CMD ["bash", "-c", "dbus-daemon --system && dbus-run-session -- python3 -m qutebrowser"]
           EOF
 
       - name: Build Podman Container with runc
@@ -257,7 +259,7 @@ jobs:
             --userns=keep-id \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest \
-            bash -c "dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+            bash -c "dbus-daemon --system & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           EOF
           chmod +x launch-qutebrowser.sh
 
