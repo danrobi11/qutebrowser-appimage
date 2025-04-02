@@ -92,6 +92,8 @@ jobs:
               libc6 \
               libgcc-s1 \
               libstdc++6 \
+              && apt-get update && apt-get install -y libxcb-cursor0 \
+              && dpkg -l | grep libxcb-cursor0 \
               && rm -rf /var/lib/apt/lists/*
 
           # Upgrade pip and install qutebrowser dependencies
@@ -131,12 +133,10 @@ jobs:
           #!/bin/bash
           set -e
 
-          # Set working directory to script location
           SCRIPT_DIR="$(dirname "$(realpath "$0")")"
           cd "$SCRIPT_DIR" || { echo "Failed to cd to $SCRIPT_DIR"; exit 1; }
           echo "Working directory set to: $(/bin/pwd)"
 
-          # Use a user-writable runtime directory
           RUNTIME_DIR="$HOME/.run"
           if [ ! -d "$RUNTIME_DIR" ]; then
             mkdir -p "$RUNTIME_DIR"
@@ -146,7 +146,6 @@ jobs:
           export XDG_RUNTIME_DIR="$RUNTIME_DIR"
           echo "XDG_RUNTIME_DIR set to: $XDG_RUNTIME_DIR"
 
-          # Ensure DISPLAY is set and X11 is accessible
           echo "DISPLAY: $DISPLAY"
           if [ -z "$DISPLAY" ]; then
             echo "DISPLAY unset—trying :0"
@@ -157,12 +156,10 @@ jobs:
             exit 1
           fi
 
-          # Grant local X11 access
           echo "Granting local X11 access..."
           xhost +SI:localuser:$USER
           xhost
 
-          # Load and run the container with full userspace access
           echo "Loading container image..."
           podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
           echo "Launching qutebrowser..."
