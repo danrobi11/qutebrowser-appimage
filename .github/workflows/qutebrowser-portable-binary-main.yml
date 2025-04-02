@@ -176,10 +176,14 @@ jobs:
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
-            -v "$HOME:/home/user:rw" \
+            -v "$HOME:/home/user:rw,z" \
             -e HOME=/home/user \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
+            -e XDG_CONFIG_HOME=/home/user/.config \
+            -e XDG_DATA_HOME=/home/user/.local/share \
+            -e XDG_CACHE_HOME=/home/user/.cache \
             --userns=keep-id \
+            --security-opt label=disable \
             localhost/qutebrowser-x11:latest
           EOF
           chmod +x launch-qutebrowser.sh
