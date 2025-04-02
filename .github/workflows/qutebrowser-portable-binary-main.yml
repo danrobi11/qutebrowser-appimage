@@ -85,6 +85,7 @@ jobs:
               alsa-utils \
               dbus \
               dbus-x11 \
+              upower \
               ffmpeg \
               libavcodec58 \
               libavformat58 \
@@ -114,17 +115,9 @@ jobs:
               libstdc++6 \
               && apt-get update && apt-get install -y libxcb-cursor0 \
               && dpkg -l | grep libxcb-cursor0 \
-              && mkdir -p /run/user/1000 /var/run/dbus /etc/dbus-1/system.d \
+              && mkdir -p /run/user/1000 /var/run/dbus \
               && chmod 700 /run/user/1000 \
               && chmod 755 /var/run/dbus \
-              && echo '<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">' > /etc/dbus-1/system.d/qutebrowser.conf \
-              && echo '<busconfig>' >> /etc/dbus-1/system.d/qutebrowser.conf \
-              && echo '  <policy user="user">' >> /etc/dbus-1/system.d/qutebrowser.conf \
-              && echo '    <allow own="org.freedesktop.UPower"/>' >> /etc/dbus-1/system.d/qutebrowser.conf \
-              && echo '    <allow send_destination="org.freedesktop.UPower"/>' >> /etc/dbus-1/system.d/qutebrowser.conf \
-              && echo '    <allow receive_sender="org.freedesktop.UPower"/>' >> /etc/dbus-1/system.d/qutebrowser.conf \
-              && echo '  </policy>' >> /etc/dbus-1/system.d/qutebrowser.conf \
-              && echo '</busconfig>' >> /etc/dbus-1/system.d/qutebrowser.conf \
               && rm -rf /var/lib/apt/lists/*
 
           # Upgrade pip and install qutebrowser dependencies
@@ -148,8 +141,8 @@ jobs:
           USER user
           WORKDIR /home/user
 
-          # Entrypoint with D-Bus and qutebrowser
-          CMD ["bash", "-c", "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && dbus-run-session -- python3 -m qutebrowser"]
+          # Entrypoint with D-Bus, UPower, and qutebrowser
+          CMD ["bash", "-c", "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && upower -i /org/freedesktop/UPower/devices/DisplayDevice & dbus-run-session -- python3 -m qutebrowser"]
           EOF
 
       - name: Build Podman Container with runc
@@ -271,7 +264,7 @@ jobs:
             --security-opt label=disable \
             --cap-add=SYS_PTRACE \
             localhost/qutebrowser-x11:latest \
-            bash -c "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+            bash -c "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && upower -i /org/freedesktop/UPower/devices/DisplayDevice & dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           EOF
           chmod +x launch-qutebrowser.sh
 
