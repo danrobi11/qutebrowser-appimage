@@ -170,9 +170,11 @@ jobs:
           #!/bin/bash
           set -e
 
-          # Get the host username
+          # Get the host username and UID/GID
           USERNAME=${USER:-$(whoami)}
-          echo "Host username: $USERNAME"
+          UID=$(id -u)
+          GID=$(id -g)
+          echo "Host username: $USERNAME (UID: $UID, GID: $GID)"
 
           # Set working directory to script location
           SCRIPT_DIR="$(dirname "$(realpath "$0")")"
@@ -216,9 +218,10 @@ jobs:
             -v "$HOME:/home/$USERNAME:rw,z" \
             -e HOME="/home/$USERNAME" \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
-            --userns=keep-id \
+            --uidmap $UID:0:1 --gidmap $GID:0:1 \
+            --group-add audio --group-add video \
             localhost/qutebrowser-x11:latest \
-            bash -c "whoami && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
+            bash -c "whoami && id && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
           # Set up audio arguments
           AUDIO_ARGS=""
@@ -241,10 +244,9 @@ jobs:
           GPU_FALLBACK=""
           if [ -d "/dev/dri" ]; then
             echo "GPU devices found, mapping /dev/dri devices"
-            # Explicitly map common GPU device files
             for dri_dev in /dev/dri/card0 /dev/dri/renderD128; do
-              if [ -f "$dri_dev" ]; then
-                GPU_ARGS="$GPU_ARGS --device $dri_dev:$dri_dev"
+              if [ -e "$dri_dev" ]; then
+                GPU_ARGS="$GPU_ARGS --device $dri_dev"
                 echo "Mapped GPU device: $dri_dev"
               fi
             done
@@ -276,12 +278,12 @@ jobs:
             -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
             $AUDIO_ARGS \
             $GPU_ARGS \
-            --userns=keep-id \
+            --uidmap $UID:0:1 --gidmap $GID:0:1 \
             --security-opt label=disable \
             --cap-add=SYS_PTRACE \
             --cap-add=SYS_ADMIN \
             localhost/qutebrowser-x11:latest \
-            bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > /etc/asound.conf && echo 'ctl.!default { type hw; card '$CARD' }' >> /etc/asound.conf && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+            bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           EOF
           chmod +x launch-qutebrowser.sh
 
