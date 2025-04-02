@@ -172,9 +172,9 @@ jobs:
 
           # Get the host username and UID/GID
           USERNAME=${USER:-$(whoami)}
-          UID=$(id -u)
-          GID=$(id -g)
-          echo "Host username: $USERNAME (UID: $UID, GID: $GID)"
+          HOST_UID=$(id -u)
+          HOST_GID=$(id -g)
+          echo "Host username: $USERNAME (UID: $HOST_UID, GID: $HOST_GID)"
 
           # Set working directory to script location
           SCRIPT_DIR="$(dirname "$(realpath "$0")")"
@@ -218,7 +218,7 @@ jobs:
             -v "$HOME:/home/$USERNAME:rw,z" \
             -e HOME="/home/$USERNAME" \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
-            --uidmap $UID:0:1 --gidmap $GID:0:1 \
+            --uidmap $HOST_UID:0:1 --gidmap $HOST_GID:0:1 \
             --group-add audio --group-add video \
             localhost/qutebrowser-x11:latest \
             bash -c "whoami && id && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
@@ -278,7 +278,7 @@ jobs:
             -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
             $AUDIO_ARGS \
             $GPU_ARGS \
-            --uidmap $UID:0:1 --gidmap $GID:0:1 \
+            --uidmap $HOST_UID:0:1 --gidmap $HOST_GID:0:1 \
             --security-opt label=disable \
             --cap-add=SYS_PTRACE \
             --cap-add=SYS_ADMIN \
