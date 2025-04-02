@@ -28,7 +28,7 @@ jobs:
           ENV DEBIAN_FRONTEND=noninteractive
           ENV XDG_RUNTIME_DIR=/run/user/1000
 
-          # Install base dependencies with Qt 6 and xcb-cursor0
+          # Install base dependencies with Qt 6, xcb-cursor0, and video codecs
           RUN apt update && apt install -y \
               python3.10 \
               python3-pip \
@@ -80,6 +80,12 @@ jobs:
               # Audio/Video for WebEngine
               libasound2 \
               libpulse0 \
+              # Video codec dependencies for MP4 playback
+              libavcodec58 \
+              libavformat58 \
+              libavutil56 \
+              libswscale5 \
+              libavresample4 \
               # Fonts and misc
               fontconfig \
               fontconfig-config \
@@ -124,6 +130,7 @@ jobs:
           CMD ["python3", "-m", "qutebrowser"]
           EOF
 
+      -b
       - name: Build Podman Container with runc
         run: |
           sudo podman build --runtime /usr/bin/runc -t qutebrowser-x11:latest -f Containerfile .
@@ -184,6 +191,7 @@ jobs:
           podman run --rm -it \
             -v "$HOME:/home/$USERNAME:rw,z" \
             -e HOME="/home/$USERNAME" \
+            -e XDG_RUNTIME_DIR=/run/user/1000 \
             --userns=keep-id \
             localhost/qutebrowser-x11:latest \
             bash -c "whoami && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
