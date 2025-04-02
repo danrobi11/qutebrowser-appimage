@@ -218,7 +218,7 @@ jobs:
             -v "$HOME:/home/$USERNAME:rw,z" \
             -e HOME="/home/$USERNAME" \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
-            --uidmap $HOST_UID:0:1 --gidmap $HOST_GID:0:1 \
+            --userns=keep-id:map \
             --group-add audio --group-add video \
             localhost/qutebrowser-x11:latest \
             bash -c "whoami && id && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
@@ -278,7 +278,7 @@ jobs:
             -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
             $AUDIO_ARGS \
             $GPU_ARGS \
-            --uidmap $HOST_UID:0:1 --gidmap $HOST_GID:0:1 \
+            --userns=keep-id:map \
             --security-opt label=disable \
             --cap-add=SYS_PTRACE \
             --cap-add=SYS_ADMIN \
