@@ -27,6 +27,7 @@ jobs:
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
           ENV XDG_RUNTIME_DIR=/run/user/1000
+          ENV PULSE_SERVER=unix:/run/user/1000/pulse/native
 
           # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
@@ -80,15 +81,20 @@ jobs:
               # Audio/Video for WebEngine
               libasound2 \
               libpulse0 \
+              pulseaudio \
               ffmpeg \
               libavcodec58 \
               libavformat58 \
               libavutil56 \
               libswscale5 \
+              libavfilter7 \
+              libavdevice58 \
               gstreamer1.0-plugins-base \
               gstreamer1.0-plugins-good \
               gstreamer1.0-plugins-bad \
+              gstreamer1.0-plugins-ugly \
               gstreamer1.0-libav \
+              gstreamer1.0-pulseaudio \
               # Fonts and misc
               fontconfig \
               fontconfig-config \
@@ -106,8 +112,9 @@ jobs:
               libstdc++6 \
               && apt-get update && apt-get install -y libxcb-cursor0 \
               && dpkg -l | grep libxcb-cursor0 \
-              && mkdir -p /run/user/1000 \
+              && mkdir -p /run/user/1000/pulse \
               && chmod 700 /run/user/1000 \
+              && chmod 700 /run/user/1000/pulse \
               && rm -rf /var/lib/apt/lists/*
 
           # Upgrade pip and install qutebrowser dependencies
@@ -123,7 +130,7 @@ jobs:
           # Create group and user (UID/GID 1000)
           RUN groupadd -g 1000 user && \
               useradd -m -u 1000 -g 1000 user && \
-              chown user:user /run/user/1000
+              chown -R user:user /run/user/1000
 
           # Set runtime user
           USER user
@@ -198,7 +205,7 @@ jobs:
             localhost/qutebrowser-x11:latest \
             bash -c "whoami && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
-          # Run qutebrowser with full userspace access
+          # Run qutebrowser with full userspace access and audio
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
@@ -208,9 +215,11 @@ jobs:
             -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
             -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
             -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
+            -e PULSE_SERVER=unix:/run/user/1000/pulse/native \
+            -v /run/user/$(id -u)/pulse:/run/user/1000/pulse:rw \
+            -v /dev/snd:/dev/snd \
             --userns=keep-id \
             --security-opt label=disable \
-            --device /dev/snd \
             localhost/qutebrowser-x11:latest \
             python3 -m qutebrowser -s content.local_content_can_access_file_urls true
           EOF
