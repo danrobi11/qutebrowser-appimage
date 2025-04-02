@@ -126,7 +126,7 @@ jobs:
               && chmod 755 /var/run/dbus \
               && chmod 4755 /usr/lib/dbus-1.0/dbus-daemon-launch-helper \
               && chmod 4755 /usr/libexec/upowerd \
-              && echo "pcm.!default { type hw; card 0; device 0 }" > /etc/asound.conf \
+              && echo "pcm.!default { type plug; slave { pcm \"hw:0,0\" } }" > /etc/asound.conf \
               && echo "ctl.!default { type hw; card 0 }" >> /etc/asound.conf \
               && rm -rf /var/lib/apt/lists/*
 
@@ -140,10 +140,10 @@ jobs:
               markupsafe \
               pyyaml
 
-          # Create group and user (UID/GID 1000), add to audio and video groups with default GIDs if they don't exist
-          RUN groupadd -g 1000 user && \
-              (getent group audio || groupadd -g 29 audio) && \
-              (getent group video || groupadd -g 44 video) && \
+          # Create group and user (UID/GID 1000), add to audio and video groups with default GIDs
+          RUN groupadd -f -g 1000 user && \
+              (groupadd -f -g 29 audio || true) && \
+              (groupadd -f -g 44 video || true) && \
               useradd -m -u 1000 -g 1000 -G audio,video user && \
               chown -R user:user /run/user/1000 /var/run/dbus
 
@@ -272,13 +272,14 @@ jobs:
               -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
               -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
               -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
+              -e ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf \
               $AUDIO_ARGS \
               $GPU_ARGS \
               --security-opt label=disable \
               --cap-add=SYS_PTRACE \
               --cap-add=SYS_ADMIN \
               localhost/qutebrowser-x11:latest \
-              bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+              bash -c "echo 'pcm.!default { type plug; slave { pcm \"hw:'$CARD',0\" } }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           else
             # Normal run without debug output
             sudo podman run --rm -it \
@@ -291,13 +292,14 @@ jobs:
               -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
               -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
               -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
+              -e ALSA_CONFIG_PATH=/usr/share/alsa/alsa.conf \
               $AUDIO_ARGS \
               $GPU_ARGS \
               --security-opt label=disable \
               --cap-add=SYS_PTRACE \
               --cap-add=SYS_ADMIN \
               localhost/qutebrowser-x11:latest \
-              bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+              bash -c "echo 'pcm.!default { type plug; slave { pcm \"hw:'$CARD',0\" } }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           fi
           EOF
           chmod +x launch-qutebrowser.sh
