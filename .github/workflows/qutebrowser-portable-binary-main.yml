@@ -204,20 +204,35 @@ jobs:
             localhost/qutebrowser-x11:latest \
             bash -c "whoami && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
-          # Set up audio and GPU arguments
+          # Set up audio arguments
           AUDIO_ARGS=""
-          GPU_ARGS=""
           if [ -d "/dev/snd" ]; then
             echo "ALSA devices found, mapping audio directories"
-            AUDIO_ARGS="-v /dev/snd:/dev/snd -v /sys/class/sound:/sys/class/sound -v /usr/share/alsa:/usr/share/alsa --group-add audio --cap-add SYS_ADMIN"
+            AUDIO_ARGS="-v /dev/snd:/dev/snd -v /sys/class/sound:/sys/class/sound -v /usr/share/alsa:/usr/share/alsa"
+            [ -f "/etc/asound.conf" ] && AUDIO_ARGS="$AUDIO_ARGS -v /etc/asound.conf:/etc/asound.conf" && echo "Mapped /etc/asound.conf"
+            [ -d "/var/lib/alsa" ] && AUDIO_ARGS="$AUDIO_ARGS -v /var/lib/alsa:/var/lib/alsa" && echo "Mapped /var/lib/alsa"
+            AUDIO_ARGS="$AUDIO_ARGS --group-add audio --cap-add SYS_ADMIN"
+            echo "Audio arguments: $AUDIO_ARGS"
           else
             echo "No ALSA devices found, audio may not work"
           fi
+
+          # Set up GPU arguments with fallback
+          GPU_ARGS=""
+          GPU_FALLBACK=""
           if [ -d "/dev/dri" ]; then
-            echo "GPU devices found, mapping /dev/dri"
-            GPU_ARGS="--device /dev/dri:/dev/dri --group-add video --cap-add SYS_ADMIN"
+            echo "GPU devices found, mapping /dev/dri devices"
+            for dri_dev in /dev/dri/*; do
+              if [ -e "$dri_dev" ]; then
+                GPU_ARGS="$GPU_ARGS --device $dri_dev:$dri_dev"
+                echo "Mapped GPU device: $dri_dev"
+              fi
+            done
+            GPU_ARGS="$GPU_ARGS --group-add video --cap-add SYS_ADMIN"
+            echo "GPU arguments: $GPU_ARGS"
           else
-            echo "No GPU devices found, video may not work"
+            echo "No GPU devices found, falling back to software rendering"
+            GPU_FALLBACK="--disable-gpu"
           fi
 
           # Run qutebrowser with full userspace access, GPU, and audio
@@ -236,7 +251,7 @@ jobs:
             --userns=keep-id \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest \
-            bash -c "dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true"
+            bash -c "dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           EOF
           chmod +x launch-qutebrowser.sh
 
