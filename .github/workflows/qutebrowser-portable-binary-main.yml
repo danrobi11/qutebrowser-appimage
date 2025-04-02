@@ -222,7 +222,7 @@ jobs:
           sudo podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar" >/dev/null 2>&1
           [ $DEBUG -eq 1 ] && echo "Loaded container image: localhost/qutebrowser-x11:latest"
 
-          # Set up audio arguments
+          # Set up audio arguments using detected AUDIO_GID
           AUDIO_ARGS=""
           if [ -d "/dev/snd" ]; then
             AUDIO_ARGS="--device /dev/snd:/dev/snd --group-add $AUDIO_GID --cap-add SYS_ADMIN"
@@ -234,7 +234,7 @@ jobs:
             [ $DEBUG -eq 1 ] && echo "No ALSA devices found, audio may not work"
           fi
 
-          # Set up GPU arguments with fallback
+          # Set up GPU arguments using detected VIDEO_GID with fallback
           GPU_ARGS=""
           GPU_FALLBACK=""
           if [ -d "/dev/dri" ]; then
