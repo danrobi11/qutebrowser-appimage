@@ -141,9 +141,9 @@ jobs:
               pyyaml
 
           # Create group and user (UID/GID 1000), add to audio and video groups with default GIDs
-          RUN groupadd -g 1000 user && \
-              groupadd -g 29 audio && \
-              groupadd -g 44 video && \
+          RUN groupadd -f -g 1000 user && \
+              (groupadd -f -g 29 audio || true) && \
+              (groupadd -f -g 44 video || true) && \
               useradd -m -u 1000 -g 1000 -G audio,video user && \
               chown -R user:user /run/user/1000 /var/run/dbus
 
