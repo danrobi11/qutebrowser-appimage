@@ -207,10 +207,22 @@ jobs:
           xhost +SI:localuser:$USER
           xhost
 
+          # Detect host audio and video group IDs dynamically
+          AUDIO_GID=$(getent group audio | cut -d: -f3 || echo 29)
+          VIDEO_GID=$(getent group video | cut -d: -f3 || echo 44)
+          echo "Detected host audio group ID: $AUDIO_GID"
+          echo "Detected host video group ID: $VIDEO_GID"
+
           # Load and run the container with full userspace access
           echo "Loading container image..."
           sudo podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
           echo "Launching qutebrowser..."
+
+          # Debug: Host device info
+          echo "Host GPU devices:"
+          ls -l /dev/dri/* 2>/dev/null || echo "No GPU devices found on host"
+          echo "Host sound devices:"
+          ls -l /dev/snd/* 2>/dev/null || echo "No sound devices found on host"
 
           # Debug: Check if home directory contents are visible and readable
           echo "Checking home directory in container..."
@@ -218,8 +230,7 @@ jobs:
             -v "$HOME:/home/$USERNAME:rw,z" \
             -e HOME="/home/$USERNAME" \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
-            --uidmap $HOST_UID:0:1 --gidmap $HOST_GID:0:1 \
-            --subuidmap 29:29:1 --subgidmap 44:44:1 \
+            --group-add "$AUDIO_GID" --group-add "$VIDEO_GID" \
             localhost/qutebrowser-x11:latest \
             bash -c "whoami && id && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
@@ -227,10 +238,10 @@ jobs:
           AUDIO_ARGS=""
           if [ -d "/dev/snd" ]; then
             echo "ALSA devices found, mapping audio devices"
-            AUDIO_ARGS="--device /dev/snd:/dev/snd --cap-add SYS_ADMIN"
+            AUDIO_ARGS="--device /dev/snd:/dev/snd --group-add $AUDIO_GID --cap-add SYS_ADMIN"
             echo "Audio arguments: $AUDIO_ARGS"
             # Debug: List sound devices
-            echo "Host sound devices:"
+            echo "Host sound devices (pre-run):"
             ls -l /dev/snd/*
             # Dynamically set ALSA card based on available devices
             CARD=$(ls /dev/snd/controlC* 2>/dev/null | head -n 1 | grep -o 'controlC[0-9]*' | cut -c9- || echo 0)
@@ -251,10 +262,10 @@ jobs:
               fi
             done
             # Debug: List GPU devices
-            echo "Host GPU devices:"
+            echo "Host GPU devices (pre-run):"
             ls -l /dev/dri/*
             if [ -n "$GPU_ARGS" ]; then
-              GPU_ARGS="$GPU_ARGS --cap-add SYS_ADMIN"
+              GPU_ARGS="$GPU_ARGS --group-add $VIDEO_GID --cap-add SYS_ADMIN"
               echo "GPU arguments: $GPU_ARGS"
             else
               echo "No valid GPU device files found, falling back to software rendering"
@@ -278,13 +289,11 @@ jobs:
             -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
             $AUDIO_ARGS \
             $GPU_ARGS \
-            --uidmap $HOST_UID:0:1 --gidmap $HOST_GID:0:1 \
-            --subuidmap 29:29:1 --subgidmap 44:44:1 \
             --security-opt label=disable \
             --cap-add=SYS_PTRACE \
             --cap-add=SYS_ADMIN \
             localhost/qutebrowser-x11:latest \
-            bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
+            bash -c "echo 'pcm.!default { type hw; card '$CARD'; device 0 }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card '$CARD' }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           EOF
           chmod +x launch-qutebrowser.sh
 
