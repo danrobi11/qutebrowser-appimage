@@ -114,8 +114,8 @@ jobs:
           # No specific user, run as root
           WORKDIR /root
 
-          # Entrypoint with --no-sandbox
-          CMD ["python3", "-m", "qutebrowser", "--no-sandbox"]
+          # Entrypoint
+          CMD ["python3", "-m", "qutebrowser"]
           EOF
 
       - name: Build Podman Container with runc
@@ -177,7 +177,7 @@ jobs:
             localhost/qutebrowser-x11:latest \
             bash -c "ls -l /home/user || echo 'Home directory not found in container'"
 
-          # Run qutebrowser with full system access
+          # Run qutebrowser with full system access and no-sandbox flag for WebEngine
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
@@ -188,6 +188,7 @@ jobs:
             -e XDG_CONFIG_HOME=/home/user/.config \
             -e XDG_DATA_HOME=/home/user/.local/share \
             -e XDG_CACHE_HOME=/home/user/.cache \
+            -e QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox" \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest
           EOF
