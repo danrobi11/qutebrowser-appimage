@@ -209,7 +209,7 @@ jobs:
           GPU_ARGS=""
           if [ -d "/dev/snd" ]; then
             echo "ALSA devices found, mapping audio directories"
-            AUDIO_ARGS="-v /dev/snd:/dev/snd -v /proc/asound:/proc/asound -v /sys/class/sound:/sys/class/sound --group-add audio"
+            AUDIO_ARGS="-v /dev/snd:/dev/snd -v /sys/class/sound:/sys/class/sound --group-add audio"
           else
             echo "No ALSA devices found, audio may not work"
           fi
