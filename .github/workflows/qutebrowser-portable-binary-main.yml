@@ -196,7 +196,8 @@ jobs:
             -e XDG_CACHE_HOME=/home/user/.cache \
             --userns=keep-id \
             --security-opt label=disable \
-            localhost/qutebrowser-x11:latest
+            localhost/qutebrowser-x11:latest \
+            --basedir /home/user
           EOF
           chmod +x launch-qutebrowser.sh
 
