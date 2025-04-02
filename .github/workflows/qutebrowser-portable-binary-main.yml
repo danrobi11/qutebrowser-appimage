@@ -114,8 +114,8 @@ jobs:
           # No specific user, run as root
           WORKDIR /root
 
-          # Entrypoint
-          CMD ["python3", "-m", "qutebrowser"]
+          # Entrypoint with --no-sandbox
+          CMD ["python3", "-m", "qutebrowser", "--no-sandbox"]
           EOF
 
       - name: Build Podman Container with runc
@@ -169,24 +169,25 @@ jobs:
           podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
           echo "Launching qutebrowser..."
 
-          # Debug: Check if the file is visible in the container
-          echo "Checking for file in container..."
+          # Debug: Check if home directory contents are visible in container
+          echo "Checking home directory in container..."
           podman run --rm -it \
             -v /:/host:ro \
+            -v "$HOME:/home/user:rw,z" \
             localhost/qutebrowser-x11:latest \
-            bash -c "ls -l /host/home/danrobi/Videos-Youtube-Downloads/Activate-superword-mode-in-the-Emacs-Minibuffer-coding-programming-WqN27ltSwag.mp4 || echo 'File not found in container'"
+            bash -c "ls -l /home/user || echo 'Home directory not found in container'"
 
           # Run qutebrowser with full system access
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
             -v /:/host:ro \
-            -v "$HOME:/home/danrobi:rw,z" \
-            -e HOME=/home/danrobi \
+            -v "$HOME:/home/user:rw,z" \
+            -e HOME=/home/user \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
-            -e XDG_CONFIG_HOME=/home/danrobi/.config \
-            -e XDG_DATA_HOME=/home/danrobi/.local/share \
-            -e XDG_CACHE_HOME=/home/danrobi/.cache \
+            -e XDG_CONFIG_HOME=/home/user/.config \
+            -e XDG_DATA_HOME=/home/user/.local/share \
+            -e XDG_CACHE_HOME=/home/user/.cache \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest
           EOF
