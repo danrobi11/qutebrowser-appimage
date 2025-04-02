@@ -197,7 +197,7 @@ jobs:
             --userns=keep-id \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest \
-            -s content.local_content_can_access_file_urls true
+            python3 -m qutebrowser -s content.local_content_can_access_file_urls true
           EOF
           chmod +x launch-qutebrowser.sh
 
