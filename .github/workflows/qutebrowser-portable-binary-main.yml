@@ -27,7 +27,6 @@ jobs:
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
           ENV XDG_RUNTIME_DIR=/run/user/1000
-          ENV QTWEBENGINE_DISABLE_SANDBOX=1
 
           # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
@@ -80,8 +79,7 @@ jobs:
               libxkbcommon-x11-0 \
               # Audio/Video for WebEngine
               libasound2 \
-              libpulse0 \
-              pulseaudio \
+              alsa-utils \
               dbus \
               ffmpeg \
               libavcodec58 \
@@ -95,7 +93,6 @@ jobs:
               gstreamer1.0-plugins-bad \
               gstreamer1.0-plugins-ugly \
               gstreamer1.0-libav \
-              gstreamer1.0-pulseaudio \
               # Fonts and misc
               fontconfig \
               fontconfig-config \
@@ -113,9 +110,8 @@ jobs:
               libstdc++6 \
               && apt-get update && apt-get install -y libxcb-cursor0 \
               && dpkg -l | grep libxcb-cursor0 \
-              && mkdir -p /run/user/1000/pulse /run/dbus \
+              && mkdir -p /run/user/1000 /run/dbus \
               && chmod 700 /run/user/1000 \
-              && chmod 700 /run/user/1000/pulse \
               && rm -rf /var/lib/apt/lists/*
 
           # Upgrade pip and install qutebrowser dependencies
@@ -128,9 +124,11 @@ jobs:
               markupsafe \
               pyyaml
 
-          # Create group and user (UID/GID 1000)
+          # Create group and user (UID/GID 1000), add to audio and video groups
           RUN groupadd -g 1000 user && \
-              useradd -m -u 1000 -g 1000 user && \
+              groupadd -g 29 audio && \
+              groupadd -g 44 video && \
+              useradd -m -u 1000 -g 1000 -G audio,video user && \
               chown -R user:user /run/user/1000 /run/dbus
 
           # Set runtime user
@@ -206,13 +204,20 @@ jobs:
             localhost/qutebrowser-x11:latest \
             bash -c "whoami && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
-          # Detect audio setup
+          # Set up audio and GPU arguments
           AUDIO_ARGS=""
+          GPU_ARGS=""
           if [ -d "/dev/snd" ]; then
-            echo "ALSA devices found, mapping /dev/snd"
-            AUDIO_ARGS="-v /dev/snd:/dev/snd"
+            echo "ALSA devices found, mapping audio directories"
+            AUDIO_ARGS="-v /dev/snd:/dev/snd -v /proc/asound:/proc/asound -v /sys/class/sound:/sys/class/sound --group-add audio"
           else
             echo "No ALSA devices found, audio may not work"
+          fi
+          if [ -d "/dev/dri" ]; then
+            echo "GPU devices found, mapping /dev/dri"
+            GPU_ARGS="--device /dev/dri:/dev/dri --group-add video"
+          else
+            echo "No GPU devices found, video may not work"
           fi
 
           # Run qutebrowser with full userspace access, GPU, and audio
@@ -225,9 +230,9 @@ jobs:
             -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
             -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
             -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
-            -e QTWEBENGINE_DISABLE_SANDBOX=1 \
+            -v /run/dbus:/run/dbus \
             $AUDIO_ARGS \
-            --device /dev/dri \
+            $GPU_ARGS \
             --userns=keep-id \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest \
