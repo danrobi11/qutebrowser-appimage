@@ -27,6 +27,7 @@ jobs:
           # Set up environment
           ENV DEBIAN_FRONTEND=noninteractive
           ENV XDG_RUNTIME_DIR=/run/user/1000
+          ENV QTWEBENGINE_DISABLE_SANDBOX=1
 
           # Install base dependencies with Qt 6, xcb-cursor0, and full multimedia support
           RUN apt update && apt install -y \
@@ -81,6 +82,7 @@ jobs:
               libasound2 \
               libpulse0 \
               pulseaudio \
+              dbus \
               ffmpeg \
               libavcodec58 \
               libavformat58 \
@@ -111,7 +113,7 @@ jobs:
               libstdc++6 \
               && apt-get update && apt-get install -y libxcb-cursor0 \
               && dpkg -l | grep libxcb-cursor0 \
-              && mkdir -p /run/user/1000/pulse \
+              && mkdir -p /run/user/1000/pulse /run/dbus \
               && chmod 700 /run/user/1000 \
               && chmod 700 /run/user/1000/pulse \
               && rm -rf /var/lib/apt/lists/*
@@ -129,14 +131,14 @@ jobs:
           # Create group and user (UID/GID 1000)
           RUN groupadd -g 1000 user && \
               useradd -m -u 1000 -g 1000 user && \
-              chown -R user:user /run/user/1000
+              chown -R user:user /run/user/1000 /run/dbus
 
           # Set runtime user
           USER user
           WORKDIR /home/user
 
-          # Entrypoint
-          CMD ["python3", "-m", "qutebrowser"]
+          # Entrypoint with D-Bus and qutebrowser
+          CMD ["bash", "-c", "dbus-run-session -- python3 -m qutebrowser"]
           EOF
 
       - name: Build Podman Container with runc
@@ -204,17 +206,16 @@ jobs:
             localhost/qutebrowser-x11:latest \
             bash -c "whoami && ls -l /home/$USERNAME && cat /home/$USERNAME/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
-          # Detect PulseAudio socket or fall back to ALSA
-          PULSE_SOCKET="/run/user/$(id -u)/pulse/native"
-          if [ -S "$PULSE_SOCKET" ]; then
-            echo "PulseAudio socket found at $PULSE_SOCKET"
-            PULSE_ARGS="-e PULSE_SERVER=unix:/run/user/1000/pulse/native -v $PULSE_SOCKET:/run/user/1000/pulse/native:rw"
+          # Detect audio setup
+          AUDIO_ARGS=""
+          if [ -d "/dev/snd" ]; then
+            echo "ALSA devices found, mapping /dev/snd"
+            AUDIO_ARGS="-v /dev/snd:/dev/snd"
           else
-            echo "No PulseAudio socket found, falling back to ALSA"
-            PULSE_ARGS="-v /dev/snd:/dev/snd"
+            echo "No ALSA devices found, audio may not work"
           fi
 
-          # Run qutebrowser with full userspace access and audio
+          # Run qutebrowser with full userspace access, GPU, and audio
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
@@ -224,11 +225,13 @@ jobs:
             -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
             -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
             -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
-            $PULSE_ARGS \
+            -e QTWEBENGINE_DISABLE_SANDBOX=1 \
+            $AUDIO_ARGS \
+            --device /dev/dri \
             --userns=keep-id \
             --security-opt label=disable \
             localhost/qutebrowser-x11:latest \
-            python3 -m qutebrowser -s content.local_content_can_access_file_urls true
+            bash -c "dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true"
           EOF
           chmod +x launch-qutebrowser.sh
 
