@@ -82,6 +82,7 @@ jobs:
               libpulse0 \
               # Fonts and misc
               fontconfig \
+              fontconfig-config \
               libfreetype6 \
               libpng16-16 \
               libjpeg8 \
@@ -173,10 +174,21 @@ jobs:
           echo "Loading container image..."
           podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
           echo "Launching qutebrowser..."
+
+          # Debug: Check if the file is visible in the container
+          echo "Checking for file in container..."
+          podman run --rm -it \
+            -v "$HOME:/home/user:rw,z" \
+            -e HOME=/home/user \
+            localhost/qutebrowser-x11:latest \
+            bash -c "ls -l /home/user/Videos-Youtube-Downloads/Activate-superword-mode-in-the-Emacs-Minibuffer-coding-programming-WqN27ltSwag.mp4 || echo 'File not found in container'"
+
+          # Run qutebrowser
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
             -v "$HOME:/home/user:rw,z" \
+            -v /run/dbus:/run/dbus:ro \
             -e HOME=/home/user \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
             -e XDG_CONFIG_HOME=/home/user/.config \
