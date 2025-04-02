@@ -111,8 +111,14 @@ jobs:
               markupsafe \
               pyyaml
 
-          # No specific user, run as root
-          WORKDIR /root
+          # Create group and user (UID/GID 1000)
+          RUN groupadd -g 1000 user && \
+              useradd -m -u 1000 -g 1000 user && \
+              chown user:user /run/user/1000
+
+          # Set runtime user
+          USER user
+          WORKDIR /home/user
 
           # Entrypoint
           CMD ["python3", "-m", "qutebrowser"]
@@ -164,7 +170,7 @@ jobs:
           xhost +SI:localuser:$USER
           xhost
 
-          # Load and run the container with full system access
+          # Load and run the container with full userspace access
           echo "Loading container image..."
           podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar"
           echo "Launching qutebrowser..."
@@ -172,26 +178,25 @@ jobs:
           # Debug: Check if home directory contents are visible and readable
           echo "Checking home directory in container..."
           podman run --rm -it \
-            -v /:/host:ro \
             -v "$HOME:/home/user:rw,z" \
+            -e HOME=/home/user \
+            --userns=keep-id \
             localhost/qutebrowser-x11:latest \
-            bash -c "ls -l /home/user && cat /home/user/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
+            bash -c "whoami && ls -l /home/user && cat /home/user/build-error-report.txt | head -n 1 || echo 'Cannot read files in home directory'"
 
-          # Run qutebrowser with full system access
+          # Run qutebrowser with full userspace access
           podman run --rm -it \
             -e DISPLAY=$DISPLAY \
             -v /tmp/.X11-unix:/tmp/.X11-unix \
-            -v /run/dbus:/run/dbus:ro \
-            -v /dev/dri:/dev/dri \
-            -v /:/host:ro \
             -v "$HOME:/home/user:rw,z" \
             -e HOME=/home/user \
             -e XDG_RUNTIME_DIR=/run/user/1000 \
             -e XDG_CONFIG_HOME=/home/user/.config \
             -e XDG_DATA_HOME=/home/user/.local/share \
             -e XDG_CACHE_HOME=/home/user/.cache \
+            --userns=keep-id \
             --security-opt label=disable \
-            localhost/qutebrowser-x11:latest --qt-arg chromium --no-sandbox
+            localhost/qutebrowser-x11:latest
           EOF
           chmod +x launch-qutebrowser.sh
 
