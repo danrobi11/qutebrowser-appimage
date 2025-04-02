@@ -114,9 +114,10 @@ jobs:
               libstdc++6 \
               && apt-get update && apt-get install -y libxcb-cursor0 \
               && dpkg -l | grep libxcb-cursor0 \
-              && mkdir -p /run/user/1000 /var/run/dbus /usr/share/dbus-1/system-services \
+              && mkdir -p /run/user/1000 /var/run/dbus /usr/share/dbus-1/system-services /etc/dbus-1/system.d \
               && chmod 700 /run/user/1000 \
               && chmod 755 /var/run/dbus \
+              && echo "user user" > /etc/dbus-1/system.d/qutebrowser.conf \
               && rm -rf /var/lib/apt/lists/*
 
           # Upgrade pip and install qutebrowser dependencies
@@ -256,10 +257,12 @@ jobs:
             -e XDG_CONFIG_HOME="/home/$USERNAME/.config" \
             -e XDG_DATA_HOME="/home/$USERNAME/.local/share" \
             -e XDG_CACHE_HOME="/home/$USERNAME/.cache" \
+            -e DBUS_SYSTEM_BUS_ADDRESS=unix:path=/var/run/dbus/system_bus_socket \
             $AUDIO_ARGS \
             $GPU_ARGS \
             --userns=keep-id \
             --security-opt label=disable \
+            --cap-add=SYS_PTRACE \
             localhost/qutebrowser-x11:latest \
             bash -c "rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && dbus-run-session -- python3 -m qutebrowser -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           EOF
