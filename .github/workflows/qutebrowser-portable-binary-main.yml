@@ -23,11 +23,11 @@ jobs:
           python3-dev python3-pip \
           libx11-dev libxrender-dev libgl1-mesa-dev \
           libssl-dev zlib1g-dev libpng-dev \
-          qemu-user-static
-        # Debug QEMU install
+          qemu-user  # Correct package for qemu-x86_64
+        # Verify qemu-x86_64
         echo "Checking QEMU install..."
-        ls -l /usr/bin/qemu-x86_64 || echo "qemu-x86_64 not in /usr/bin/"
-        qemu-x86_64 --version || echo "QEMU not executable or missing!" && exit 1
+        ls -l /usr/bin/qemu-x86_64 || { echo "qemu-x86_64 not found!"; exit 1; }
+        qemu-x86_64 --version || { echo "QEMU not executable!"; exit 1; }
 
     - name: Install Python dependencies
       run: |
