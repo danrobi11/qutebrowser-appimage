@@ -228,7 +228,7 @@ jobs:
           [ $DEBUG -eq 1 ] && echo "Detected host video group ID: $VIDEO_GID"
 
           # Load the container image
-          sudo podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar" >/dev/null 2>&1
+          podman load -i "$SCRIPT_DIR/qutebrowser-x11.tar" >/dev/null 2>&1
           [ $DEBUG -eq 1 ] && echo "Loaded container image: localhost/qutebrowser-x11:latest"
 
           # Set up audio arguments using detected AUDIO_GID
@@ -269,7 +269,7 @@ jobs:
             echo "Host sound devices:"
             ls -l /dev/snd/* 2>/dev/null || echo "No sound devices found on host"
             echo "Launching qutebrowser with debug output..."
-            sudo podman run --rm -it \
+            podman run --rm -it \
               -e DISPLAY=$DISPLAY \
               -v /tmp/.X11-unix:/tmp/.X11-unix \
               -v "$HOME:/home/$USERNAME:rw,z" \
@@ -290,7 +290,7 @@ jobs:
               bash -c "echo 'pcm.!default { type plug; slave { pcm \"hw:1,0\" } }' > $HOME/.asoundrc && echo 'ctl.!default { type hw; card 1 }' >> $HOME/.asoundrc && echo 'Container GPU devices:' && ls -l /dev/dri/* 2>/dev/null || echo 'No GPU devices in container' && echo 'Container sound devices:' && ls -l /dev/snd/* 2>/dev/null || echo 'No sound devices in container' && aplay -l && echo 'Testing audio playback...' && (aplay /usr/share/sounds/alsa/Front_Center.wav || echo 'Audio test failed') && echo 'Testing GStreamer playback...' && (gst-launch-1.0 filesrc location=/home/$USERNAME/Videos-Youtube-Downloads/Activate-superword-mode-in-the-Emacs-Minibuffer-coding-programming-WqN27ltSwag.mp4 ! decodebin ! autovideosink || echo 'GStreamer test failed') && rm -f /var/run/dbus/system_bus_socket && dbus-daemon --system --nofork --nopidfile --address=unix:path=/var/run/dbus/system_bus_socket & sleep 2 && /usr/libexec/upowerd & sleep 1 && dbus-run-session -- python3 -m qutebrowser --debug --loglevel debug -s content.local_content_can_access_file_urls true $GPU_FALLBACK"
           else
             # Normal run without debug output
-            sudo podman run --rm -it \
+            podman run --rm -it \
               -e DISPLAY=$DISPLAY \
               -v /tmp/.X11-unix:/tmp/.X11-unix \
               -v "$HOME:/home/$USERNAME:rw,z" \
