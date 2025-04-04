@@ -133,13 +133,14 @@ jobs:
           -no-feature-dbus \
           -no-feature-glib \
           -no-cups \
+          # --- FIXED: Removed "-skip qtdeclarative" ---
           -skip qt3d \
           -skip qtactiveqt \
           -skip qtcharts \
           -skip qtcoap \
           -skip qtconnectivity \
           -skip qtdatavis3d \
-          -skip qtdeclarative \
+          # -skip qtdeclarative # <--- REMOVED THIS LINE
           -skip qtdoc \
           -skip qtgraphs \
           -skip qthttpserver \
@@ -167,7 +168,9 @@ jobs:
           -skip qtwebglplugin \
           -skip qtwebsockets \
           -skip qtwebview
-        cmake --build . --parallel $(nproc) --target corelib gui widgets network # Build only essential modules first
+          # Purposefully NOT skipping: qtbase, qtdeclarative (dependency), qtwebengine
+        # Build essential modules + qtdeclarative now
+        cmake --build . --parallel $(nproc) --target corelib gui widgets network declarative
         sudo cmake --install . --prefix /opt/qt6-static
 
     # --- Build Static QtWebEngine ---
