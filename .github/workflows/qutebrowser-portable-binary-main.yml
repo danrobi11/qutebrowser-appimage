@@ -21,75 +21,25 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt-get update
-        # Add -x temporarily for debugging if needed: # set -x
+        # Combine package list onto fewer lines to avoid backslash issues
         sudo apt-get install -y --no-install-recommends \
-          build-essential \
-          cmake \
-          git \
-          wget \
-          xz-utils \
-          ca-certificates \
-          # Python
-          python3-dev \
-          python3-pip \
-          python3-venv \
-          # QEMU
+          build-essential cmake git wget xz-utils ca-certificates \
+          python3-dev python3-pip python3-venv \
           qemu-user-static \
-          # Qt / General Build
-          ninja-build \
-          gperf \
-          pkg-config \
-          patchelf \
-          # X11 / Graphics Headers (Needed by Qt/QtWebEngine build)
-          libx11-dev \
-          libxkbcommon-x11-dev \
-          libxkbcommon-dev \
-          libxcb1-dev \
-          libxcb-util-dev \
-          libxcb-keysyms1-dev \
-          libxcb-icccm4-dev \
-          libxcb-randr0-dev \
-          libxcb-xkb-dev \
-          libxcb-xinerama0-dev \
-          libxcb-shape0-dev \
-          libxcb-sync-dev \
-          libxcb-render-util0-dev \
-          libxcb-image0-dev \
-          libdrm-dev \
-          libxcomposite-dev \
-          libxtst-dev \
-          libxdamage-dev \
-          libxrandr-dev \
-          libx11-xcb-dev \
-          libgl1-mesa-dev \
-          libegl1-mesa-dev \
-          libegl-dev \
+          ninja-build gperf pkg-config patchelf \
+          libx11-dev libxkbcommon-x11-dev libxkbcommon-dev libxcb1-dev libxcb-util-dev \
+          libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-randr0-dev libxcb-xkb-dev \
+          libxcb-xinerama0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-render-util0-dev \
+          libxcb-image0-dev libdrm-dev libxcomposite-dev libxtst-dev libxdamage-dev \
+          libxrandr-dev libx11-xcb-dev libgl1-mesa-dev libegl1-mesa-dev libegl-dev \
           libglvnd-dev \
-          # Qt Dependencies (to build statically)
-          libicu-dev \
-          libfontconfig1-dev \
-          libfreetype6-dev \
-          libssl-dev \
-          libzstd-dev \
-          libpng-dev \
-          libjpeg-dev \
-          libwebp-dev \
-          libharfbuzz-dev \
-          zlib1g-dev \
-          # FFmpeg Dependencies
-          nasm \
-          yasm \
-          libx264-dev \
-          libvpx-dev \
-          # Audio Dependencies (for QtWebEngine/FFmpeg)
-          libasound2-dev \
-          libpulse-dev \
-          # Network Dependencies
+          libicu-dev libfontconfig1-dev libfreetype6-dev libssl-dev libzstd-dev \
+          libpng-dev libjpeg-dev libwebp-dev libharfbuzz-dev zlib1g-dev \
+          nasm yasm libx264-dev libvpx-dev \
+          libasound2-dev libpulse-dev \
           libnss3-dev \
-          # PyQt Build
-          python3-pyqt6.sip \
-        # Cleanup (optional, remove after debugging if needed)
-        # set +x
+          python3-pyqt6.sip
+        echo "Finished installing dependencies."
 
     - name: Set Environment Variables
       run: |
@@ -125,27 +75,14 @@ jobs:
           --enable-libx264 \
           --enable-libvpx \
           # Add other needed decoders/demuxers/protocols for web compatibility
-          --enable-decoder=aac \
-          --enable-decoder=h264 \
-          --enable-decoder=vp8 \
-          --enable-decoder=vp9 \
-          --enable-decoder=theora \
-          --enable-decoder=opus \
+          --enable-decoder=aac --enable-decoder=h264 --enable-decoder=vp8 \
+          --enable-decoder=vp9 --enable-decoder=theora --enable-decoder=opus \
           --enable-decoder=vorbis \
-          --enable-demuxer=aac \
-          --enable-demuxer=flv \
-          --enable-demuxer=hls \
-          --enable-demuxer=matroska \
-          --enable-demuxer=mov \
-          --enable-demuxer=mp3 \
-          --enable-demuxer=ogg \
-          --enable-demuxer=wav \
-          --enable-protocol=file \
-          --enable-protocol=http \
-          --enable-protocol=https \
-          --enable-protocol=tcp \
-          --enable-protocol=tls \
-          --enable-protocol=udp
+          --enable-demuxer=aac --enable-demuxer=flv --enable-demuxer=hls \
+          --enable-demuxer=matroska --enable-demuxer=mov --enable-demuxer=mp3 \
+          --enable-demuxer=ogg --enable-demuxer=wav \
+          --enable-protocol=file --enable-protocol=http --enable-protocol=https \
+          --enable-protocol=tcp --enable-protocol=tls --enable-protocol=udp
         make -j$(nproc)
         sudo make install
         cd ..
@@ -162,11 +99,8 @@ jobs:
           -release -optimize-size \
           -no-pch \
           -platform linux-g++ \
-          # Essential features for WebEngine
           -fontconfig \
           -icu \
-          # Include necessary multimedia/graphics backends if possible
-          # -qt-libpng -qt-libjpeg -qt-freetype -qt-harfbuzz are default/enabled when found
           -no-feature-dbus \
           -no-feature-glib \
           -no-cups \
@@ -176,14 +110,14 @@ jobs:
           -skip qtcoap \
           -skip qtconnectivity \
           -skip qtdatavis3d \
-          -skip qtdeclarative \ # Re-add if Qutebrowser build fails needing QtQuick/QML
+          -skip qtdeclarative \
           -skip qtdoc \
           -skip qtgraphs \
           -skip qthttpserver \
           -skip qtlocation \
           -skip qtlottie \
           -skip qtmqtt \
-          -skip qtmultimedia \ # WebEngine provides its own multimedia via FFmpeg
+          -skip qtmultimedia \
           -skip qtnetworkauth \
           -skip qtopcua \
           -skip qtpositioning \
@@ -204,7 +138,6 @@ jobs:
           -skip qtwebglplugin \
           -skip qtwebsockets \
           -skip qtwebview
-          # Purposefully NOT skipping: qtbase, qtwebengine
         cmake --build . --parallel $(nproc) --target corelib gui widgets network # Build only essential modules first
         sudo cmake --install . --prefix /opt/qt6-static
 
@@ -220,8 +153,7 @@ jobs:
         /opt/qt6-static/bin/qt-configure-module . \
           -webengine-ffmpeg=system \
           -feature-webengine-proprietary-codecs \
-          -no-feature-webengine-pulse-audio # Try building without pulseaudio first for smaller size/fewer deps
-          # -webengine-alsa # Enable if needed
+          -no-feature-webengine-pulse-audio
         # Build and install QtWebEngine
         cmake --build . --parallel $(nproc)
         sudo cmake --install . --prefix /opt/qt6-static
@@ -239,9 +171,6 @@ jobs:
         qmake -v
 
         # Build PyQt6 - this will take time
-        # Pin versions carefully - check Qutebrowser compatibility. Use versions compatible with Qt ${QT_VERSION}
-        # Let's try installing without strict pinning first to see if pip can resolve compatible versions
-        # If this fails, try pinning e.g.: PyQt6==6.6.0 PyQt6-sip==13.6.0 PyQt6-WebEngine==6.6.0
         echo "Attempting to build PyQt6 and PyQt6-WebEngine from source..."
         python3 -m pip install --no-cache-dir --verbose --no-binary :all: PyQt6 PyQt6-sip PyQt6-WebEngine
 
@@ -269,8 +198,6 @@ jobs:
       run: |
         cd qutebrowser
         echo "Running PyInstaller..."
-        # PyInstaller might need help finding resources and static plugins
-        # The paths added via --add-data must exist in the build container at this point
         # Destination paths (after ':') are relative to the PyInstaller bundle root
         pyinstaller --noconfirm --log-level=INFO \
           --name qutebrowser \
@@ -327,32 +254,18 @@ jobs:
         # X11 Forwarding
         if [ -n "$DISPLAY" ]; then
           echo "Setting up X11 forwarding for DISPLAY=$DISPLAY"
+          # QEMU needs the DISPLAY env var set to the host:port format
+          # Assume standard formats like :0, :0.0, unix:0, hostname:0
           QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY")
-          # Ensure X11 socket directory exists and add volume mount for QEMU
-          X11_SOCKET_DIR=$(dirname "${DISPLAY}")
+
+          # Determine X11 socket directory based on DISPLAY
+          X11_SOCKET_DIR="/tmp/.X11-unix" # Default assumption
           if [[ "$DISPLAY" == /* ]]; then # Absolute path socket (e.g. /tmp/.X11-unix/X0)
-             X11_SOCKET_PATH="$DISPLAY"
-             X11_SOCKET_DIR=$(dirname "$X11_SOCKET_PATH")
-             DISPLAY_NUM=$(basename "$X11_SOCKET_PATH")
-             # QEMU needs the DISPLAY env var set to the host:port format, not the socket path
-             # Attempt to get host:port from `xauth list $DISPLAY` or make a guess
-             DISPLAY_HOST_PORT=$(echo "$DISPLAY" | sed -n 's/^\([^:]*\):\([0-9]\+\).*/\1:\2/p')
-             if [ -z "$DISPLAY_HOST_PORT" ]; then
-                 # Fallback guess if socket path was given
-                 DISPLAY_HOST_PORT="unix:$(echo "$DISPLAY" | sed -n 's/.*X\([0-9]\+\)/\1/p')"
-                 echo "Warning: DISPLAY uses socket path. Guessing DISPLAY as $DISPLAY_HOST_PORT for QEMU."
-             fi
-             QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY_HOST_PORT")
-
+             X11_SOCKET_DIR=$(dirname "$DISPLAY")
           elif [[ "$DISPLAY" == unix:* ]]; then # unix: socket format
-            X11_SOCKET_DIR="/tmp/.X11-unix" # Standard location
-            DISPLAY_HOST_PORT="$DISPLAY"
-            QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY_HOST_PORT")
-
+             : # Keep default /tmp/.X11-unix
           else # Standard :0, hostname:0 format
-            DISPLAY_HOST_PORT="$DISPLAY"
-            X11_SOCKET_DIR="/tmp/.X11-unix" # Standard location
-            QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY_HOST_PORT")
+             : # Keep default /tmp/.X11-unix
           fi
 
           # Mount the socket directory if it exists
@@ -363,7 +276,6 @@ jobs:
           fi
 
           # Handle Xauthority
-          # Determine effective XAUTHORITY path
           XAUTH_FILE="${XAUTHORITY:-$HOME/.Xauthority}"
           if [ -f "$XAUTH_FILE" ]; then
             echo "Using Xauthority file: $XAUTH_FILE"
@@ -384,18 +296,13 @@ jobs:
         QEMU_ARGS+=("-E" "LOGNAME=$LOGNAME")
 
         # Pass Qt specific environment variables that might be needed inside QEMU
-        # These paths are relative to the root *inside* the QEMU environment.
-        # PyInstaller unpacks to /tmp/_MEIxxxxxx, but env vars set here might influence Qt's search paths BEFORE PyInstaller overrides them.
-        # Let's use the paths defined in --add-data destination.
-        QEMU_ARGS+=("-E" "QT_PLUGIN_PATH=/qt6/plugins")
+        QEMU_ARGS+=("-E" "QT_PLUGIN_PATH=/qt6/plugins") # Path needs to match PyInstaller '--add-data' dest
         QEMU_ARGS+=("-E" "QT_QPA_PLATFORM=xcb") # Explicitly set platform plugin
         QEMU_ARGS+=("-E" "QTWEBENGINEPROCESS_PATH=/qt6/libexec/QtWebEngineProcess")
 
-        # Fontconfig Cache (Important for static fontconfig)
-        # Make cache user-specific and writable within the user's home
-        # Inside QEMU, $HOME will be mapped to the host $HOME
+        # Fontconfig Cache
         QEMU_ARGS+=("-E" "XDG_CACHE_HOME=$HOME/.cache")
-        QEMU_ARGS+=("-E" "FONTCONFIG_PATH=/etc/fonts") # Standard host path might be needed by static fontconfig
+        QEMU_ARGS+=("-E" "FONTCONFIG_PATH=/etc/fonts") # Standard host path might be needed
 
         # Sound (Pulseaudio/Pipewire via socket)
         if [ -n "$XDG_RUNTIME_DIR" ]; then
@@ -407,17 +314,11 @@ jobs:
               QEMU_ARGS+=("-v" "$PULSE_SOCKET:$PULSE_SOCKET")
           elif [ -S "$PIPEWIRE_SOCKET" ]; then
               echo "Setting up PipeWire forwarding via $PIPEWIRE_SOCKET (experimental)"
-              # PipeWire might need more env vars or specific setup
-              QEMU_ARGS+=("-v" "$XDG_RUNTIME_DIR:$XDG_RUNTIME_DIR") # Broad access might be needed
+              QEMU_ARGS+=("-v" "$XDG_RUNTIME_DIR:$XDG_RUNTIME_DIR")
           fi
         else
           echo "Warning: XDG_RUNTIME_DIR not set, cannot forward PulseAudio/PipeWire sockets."
         fi
-        # Fallback ALSA access (requires device access)
-        # if [ -d /dev/snd ]; then
-        #   echo "Mapping ALSA devices /dev/snd"
-        #   QEMU_ARGS+=("-v" "/dev/snd:/dev/snd")
-        # fi
 
         # Locale settings from host
         QEMU_ARGS+=("-E" "LANG=${LANG:-C.UTF-8}")
@@ -425,7 +326,6 @@ jobs:
         QEMU_ARGS+=("-E" "LANGUAGE=${LANGUAGE}")
 
         echo "Starting Qutebrowser via QEMU..."
-        # The QEMU command requires the host path to the target binary
         # Pass remaining arguments "$@" to qutebrowser
         "$QEMU_BIN" "${QEMU_ARGS[@]}" "$QUTEBROWSER_APP" "$@"
 
