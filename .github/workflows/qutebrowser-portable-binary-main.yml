@@ -1,4 +1,4 @@
-name: Build qutebrowser with QEMU and glibc static #5
+name: Build qutebrowser with QEMU and glibc static #6
 
 on:
   push:
@@ -27,15 +27,18 @@ jobs:
           python3-pip \
           libx11-dev \
           libxkbcommon-x11-dev \
+          libxkbcommon-dev \
           libxcb1-dev \
           libxcb-util-dev \
           libxcb-keysyms1-dev \
           libxcb-icccm4-dev \
           libxcb-randr0-dev \
+          libxcb-xkb-dev \
           qemu-user \
           g++-10 \
           pkg-config \
-          ninja-build
+          ninja-build \
+          gperf
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100
 
