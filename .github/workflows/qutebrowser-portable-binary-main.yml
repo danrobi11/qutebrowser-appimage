@@ -21,6 +21,7 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt-get update
+        # Note: We are NOT adding libcups2-dev, instead disabling the feature
         sudo apt-get install -y --no-install-recommends \
           build-essential cmake git wget xz-utils ca-certificates \
           python3-dev python3-pip python3-venv python3-html5lib \
@@ -149,7 +150,6 @@ jobs:
     # --- Phase 2: Build Static QtWebEngine ---
     - name: Build static QtWebEngine (using custom FFmpeg)
       env:
-        # LDFLAGS/CPPFLAGS might still be useful for CMake finding FFmpeg? Keep them.
         LDFLAGS: "-L/opt/ffmpeg-static/lib -L/opt/qt6-static/lib"
         CPPFLAGS: "-I/opt/ffmpeg-static/include -I/opt/qt6-static/include"
       run: |
@@ -157,22 +157,17 @@ jobs:
         set -e
         echo "Configuring QtWebEngine (Phase 2) using direct CMake..."
 
-        # Go to the webengine source directory
         cd qt-everywhere-src-${{ env.QT_VERSION }}/qtwebengine
-
-        # Create a build directory (recommended practice)
-        mkdir -p build # Ensure build dir exists
+        mkdir -p build
         cd build
 
         echo "Cleaning previous CMake cache (if any)..."
-        # Remove cache from parent dir if qt-configure-module left one, and current
         rm -f ../CMakeCache.txt || true
         rm -f CMakeCache.txt || true
 
         echo "Running CMake for WebEngine..."
-        # --- FIXED: Use direct cmake with CMAKE_PREFIX_PATH ---
+        # --- FIXED: Added -DQT_FEATURE_webengine_cups=OFF ---
         set -x
-        # Point to the static Qt install and pass features as -D defines
         cmake .. \
           -GNinja \
           -DCMAKE_INSTALL_PREFIX=/opt/qt6-static \
@@ -182,8 +177,8 @@ jobs:
           -DQT_FEATURE_webengine_system_ffmpeg=ON \
           -DQT_FEATURE_webengine_proprietary_codecs=ON \
           -DQT_FEATURE_webengine_pulse_audio=OFF \
-          -DQt6WebEngineCore_INSTALL_VERSIONLESS_USE_GENERATOR_FILE=OFF # Often needed for static builds
-          # Add any other CMake flags if required, e.g., -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+          -DQT_FEATURE_webengine_cups=OFF \
+          -DQt6WebEngineCore_INSTALL_VERSIONLESS_USE_GENERATOR_FILE=OFF
         _configure_exit_code=$?
         set +x
 
@@ -201,10 +196,9 @@ jobs:
         if [ $? -ne 0 ]; then echo "ERROR: QtWebEngine build (Phase 2) failed."; exit 1; fi
 
         echo "Installing QtWebEngine (Phase 2)..."
-        # Install uses the CMAKE_INSTALL_PREFIX set during configure
         sudo cmake --install .
         if [ $? -ne 0 ]; then echo "ERROR: QtWebEngine install (Phase 2) failed."; exit 1; fi
-        cd ../../.. # Go back to the main build directory from qtwebengine/build
+        cd ../../..
 
         ' # End of bash block
 
