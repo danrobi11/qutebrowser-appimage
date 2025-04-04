@@ -1,4 +1,4 @@
-name: Build qutebrowser with QEMU and glibc static #9
+name: Build qutebrowser with QEMU and glibc static #10
 
 on:
   push:
@@ -48,6 +48,7 @@ jobs:
           libegl-dev \
           libglvnd-dev \
           libnss3-dev \
+          libdbus-1-dev \
           qemu-user \
           g++-10 \
           pkg-config \
