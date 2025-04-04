@@ -72,7 +72,7 @@ jobs:
         ./configure -static -prefix /opt/qt-static -opensource -confirm-license \
           -release -optimize-size -no-opengl -no-icu -no-feature-fontconfig \
           -no-feature-dbus -no-feature-glib -skip qt3d -skip qtmultimedia \
-          -skip qtscript -skip qtsvg -skip qttools -xcb -qt-xcb -qt-zlib \
+          -skip qtscript -skip qtsvg -skip qttools -xcb -qt-zlib \
           -qt-libpng -no-cups -qt-libjpeg -qt-freetype -qt-harfbuzz -qt-pcre
         make -j$(nproc)
         sudo make install
