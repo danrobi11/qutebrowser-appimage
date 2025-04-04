@@ -24,8 +24,7 @@ jobs:
           libx11-dev libxrender-dev libgl1-mesa-dev \
           libssl-dev zlib1g-dev libpng-dev \
           qemu-user \
-          g++-10  # Add GCC 10
-        # Set GCC 10 as default
+          g++-10
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100
 
@@ -39,7 +38,7 @@ jobs:
         tar xf qt-everywhere-src-5.15.2.tar.xz
         cd qt-everywhere-src-5.15.2
         ./configure -static -prefix /opt/qt-static -opensource -confirm-license \
-          -qt-xcb -no-opengl -skip qt3d -skip qtmultimedia
+          -xcb -no-opengl -skip qt3d -skip qtmultimedia  # Fixed: -qt-xcb -> -xcb
         make -j$(nproc)
         sudo make install
 
