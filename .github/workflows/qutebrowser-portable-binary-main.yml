@@ -27,7 +27,8 @@ jobs:
           g++-10 \
           libxcb1-dev libxcb-xinerama0-dev libxcb-xkb-dev libxkbcommon-x11-dev \
           libxcb-util-dev libxcb-keysyms1-dev libxcb-image0-dev libxcb-render-util0-dev libxkbcommon-dev \
-          gperf bison flex ninja-build pkg-config python2 # Full XCB stack and WebEngine tools
+          libxcb-sync-dev libxcb-icccm4-dev libxcb-randr0-dev libxcb-shape0-dev \ # More XCB for xcb_syslibs
+          gperf bison flex ninja-build pkg-config python2 libnss3-dev # WebEngine tools + NSS
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100
         sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 100 # Set Python 2 as default
