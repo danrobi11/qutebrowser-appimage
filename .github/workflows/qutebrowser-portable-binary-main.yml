@@ -103,7 +103,24 @@ jobs:
     # --- Build Static Qt6 Core ---
     - name: Download and build static Qt6 core
       run: |
-        wget https://download.qt.io/archive/qt/${{ env.QT_VERSION }}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz
+        # Extract major.minor version (e.g., 6.6 from 6.6.3)
+        QT_MAJOR_MINOR="${QT_VERSION%.*}"
+        QT_DOWNLOAD_URL="https://download.qt.io/archive/qt/${QT_MAJOR_MINOR}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz"
+
+        echo "Downloading Qt from: ${QT_DOWNLOAD_URL}"
+        wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL}"
+        if [ $? -ne 0 ]; then
+          echo "Error: Failed to download Qt source from download.qt.io."
+          # Try archive.qt.io as a fallback (sometimes download.qt.io has issues)
+          QT_DOWNLOAD_URL_FALLBACK="https://archive.qt.io/archive/qt/${QT_MAJOR_MINOR}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz"
+          echo "Attempting fallback download from: ${QT_DOWNLOAD_URL_FALLBACK}"
+          wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL_FALLBACK}"
+          if [ $? -ne 0 ]; then
+             echo "Error: Fallback download also failed. Aborting."
+             exit 1
+          fi
+        fi
+
         tar xf qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz
         cd qt-everywhere-src-${{ env.QT_VERSION }}
         # Apply patches if necessary (e.g., for static build issues)
@@ -184,7 +201,11 @@ jobs:
 
         # Build PyQt6 - this will take time
         echo "Attempting to build PyQt6 and PyQt6-WebEngine from source..."
-        python3 -m pip install --no-cache-dir --verbose --no-binary :all: PyQt6 PyQt6-sip PyQt6-WebEngine
+        # Added --config-settings to explicitly point to static qmake
+        # This is often needed when building PyQt against a custom Qt build
+        python3 -m pip install --no-cache-dir --verbose --no-binary :all: \
+          --config-settings="--qmake=/opt/qt6-static/bin/qmake" \
+          PyQt6 PyQt6-sip PyQt6-WebEngine
 
         # Verify installation (optional but recommended)
         echo "Verifying PyQt6 installation..."
