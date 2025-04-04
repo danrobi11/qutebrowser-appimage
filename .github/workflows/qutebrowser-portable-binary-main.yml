@@ -102,7 +102,6 @@ jobs:
         chmod +x ./configure
 
         echo "Running Qt configure (Phase 1: Base)..."
-        # No set -x here, too noisy for configure itself
         ./configure \
             -static \
             -prefix /opt/qt6-static \
@@ -167,19 +166,21 @@ jobs:
         echo "Cleaning previous CMake cache (if any)..."
         rm -f CMakeCache.txt || true
 
-        # Configure QtWebEngine module using the installed static Qt base
-        echo "Running qt-configure-module for WebEngine..."
-        # Use confirmed correct flags
+        echo "Running qt-configure-module for WebEngine using -D flags..."
+        # --- FIXED: Pass features as CMake -D variables ---
         set -x
         /opt/qt6-static/bin/qt-configure-module . \
-          -feature-webengine-system-ffmpeg \
-          -feature-webengine-proprietary-codecs \
-          -no-feature-webengine-pulse-audio
+          -DQT_FEATURE_webengine_system_ffmpeg=ON \
+          -DQT_FEATURE_webengine_proprietary_codecs=ON \
+          -DQT_FEATURE_webengine_pulse_audio=OFF
         _configure_exit_code=$?
         set +x
 
         if [ $_configure_exit_code -ne 0 ]; then
           echo "ERROR: QtWebEngine configure (Phase 2) failed with exit code $_configure_exit_code."
+          echo "--- Last 50 lines of ./config.log (if exists) ---"
+          tail -n 50 ./config.log || true
+          echo "--- Finding CMake log files ---"
           find . -name "CMakeOutput.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
           find . -name "CMakeError.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
           exit 1
