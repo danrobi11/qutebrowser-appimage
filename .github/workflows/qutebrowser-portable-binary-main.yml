@@ -1,4 +1,4 @@
-name: Build qutebrowser with QEMU and glibc static #4
+name: Build qutebrowser with QEMU and glibc static #5
 
 on:
   push:
@@ -50,7 +50,7 @@ jobs:
         cd qt-everywhere-src-5.15.2
         ./configure -static -prefix /opt/qt-static -opensource -confirm-license \
           -release -optimize-size -no-opengl -no-dbus -no-icu -no-fontconfig \
-          -skip qt3d -skip qtmultimedia -skip qtscript -skip Godcha -skip qttools \
+          -skip qt3d -skip qtmultimedia -skip qtscript -skip qtsvg -skip qttools \
           -xcb -qt-zlib -qt-libpng -no-cups
         make -j$(nproc)
         sudo make install
