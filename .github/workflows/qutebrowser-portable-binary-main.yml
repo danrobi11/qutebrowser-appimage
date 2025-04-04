@@ -1,4 +1,4 @@
-name: Build qutebrowser with QEMU and glibc static #2
+name: Build qutebrowser with QEMU and glibc static #3
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
           -release -optimize-size -no-opengl -no-dbus -no-icu -no-fontconfig \
           -no-feature-dbus -no-feature-fontconfig -no-feature-cups \
           -skip qt3d -skip qtmultimedia -skip qtscript -skip qtsvg -skip qttools \
-          -qt-xcb -qt-zlib -qt-libpng -qt-libjpeg -qt-freetype -qt-harfbuzz \
+          -xcb yes -qt-zlib -qt-libpng -qt-libjpeg -qt-freetype -qt-harfbuzz \
           -no-feature-xcb-glx -no-feature-xcb-sm
         make -j$(nproc)
         sudo make install
