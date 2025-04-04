@@ -26,9 +26,11 @@ jobs:
           qemu-user \
           g++-10 \
           libxcb1-dev libxcb-xinerama0-dev libxcb-xkb-dev libxkbcommon-x11-dev \
-          gperf bison flex  # WebEngine tools, no trailing \
+          libxcb-util-dev libxcb-keysyms1-dev libxcb-image0-dev libxcb-render-util0-dev libxkbcommon-dev \ # Full XCB stack
+          gperf bison flex ninja-build pkg-config python2  # WebEngine tools + Python 2
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100
+        sudo update-alternatives --install /usr/bin/python python /usr/bin/python2 100  # Set Python 2 as default
 
     - name: Install Python dependencies
       run: |
