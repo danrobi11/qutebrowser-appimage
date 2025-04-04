@@ -38,7 +38,8 @@ jobs:
           nasm yasm libx264-dev libvpx-dev \
           libasound2-dev libpulse-dev \
           libnss3-dev \
-          python3-pyqt6.sip
+          python3-pyqt6.sip \
+          libclang-15-dev # <-- FIXED: Added libclang dev package
         echo "Finished installing dependencies."
 
     - name: Set Environment Variables
@@ -133,15 +134,15 @@ jobs:
           -no-feature-dbus \
           -no-feature-glib \
           -no-cups \
-          # --- FIXED: Removed "-skip qtdeclarative" ---
+          -no-feature-qdoc \ # <-- FIXED: Explicitly disable qdoc feature
           -skip qt3d \
           -skip qtactiveqt \
           -skip qtcharts \
           -skip qtcoap \
           -skip qtconnectivity \
           -skip qtdatavis3d \
-          # -skip qtdeclarative # <--- REMOVED THIS LINE
-          -skip qtdoc \
+          # qtdeclarative is now built (dependency of qtwebengine)
+          -skip qtdoc \ # Skip the documentation module itself
           -skip qtgraphs \
           -skip qthttpserver \
           -skip qtlocation \
@@ -160,7 +161,7 @@ jobs:
           -skip qtserialport \
           -skip qtspeech \
           -skip qtsvg \
-          -skip qttools \
+          -skip qttools \ # Still skip building the tools module
           -skip qttranslations \
           -skip qtvirtualkeyboard \
           -skip qtwayland \
@@ -168,8 +169,8 @@ jobs:
           -skip qtwebglplugin \
           -skip qtwebsockets \
           -skip qtwebview
-          # Purposefully NOT skipping: qtbase, qtdeclarative (dependency), qtwebengine
-        # Build essential modules + qtdeclarative now
+          # Purposefully NOT skipping: qtbase, qtdeclarative, qtwebengine
+        # Build essential modules + qtdeclarative
         cmake --build . --parallel $(nproc) --target corelib gui widgets network declarative
         sudo cmake --install . --prefix /opt/qt6-static
 
@@ -205,7 +206,6 @@ jobs:
         # Build PyQt6 - this will take time
         echo "Attempting to build PyQt6 and PyQt6-WebEngine from source..."
         # Added --config-settings to explicitly point to static qmake
-        # This is often needed when building PyQt against a custom Qt build
         python3 -m pip install --no-cache-dir --verbose --no-binary :all: \
           --config-settings="--qmake=/opt/qt6-static/bin/qmake" \
           PyQt6 PyQt6-sip PyQt6-WebEngine
