@@ -67,7 +67,7 @@ jobs:
         python3 -m pip install --no-cache-dir --root-user-action=ignore \
           setuptools wheel build pyqt6 jinja2 markupsafe pyyaml
 
-    - name: Download and build minimal static Qt6
+    - name: Download and build minimal static Qt6 core
       run: |
         wget https://download.qt.io/archive/qt/6.2/6.2.4/single/qt-everywhere-src-6.2.4.tar.xz
         tar xf qt-everywhere-src-6.2.4.tar.xz
@@ -75,14 +75,25 @@ jobs:
         ./configure -static -prefix /opt/qt6-static -opensource -confirm-license \
           -release -optimize-size -no-opengl -no-icu -no-feature-fontconfig \
           -no-feature-dbus -no-feature-glib -skip qt3d -skip qtmultimedia \
-          -skip qtscript -skip qtsvg -skip qttools -qt-zlib -qt-libpng \
-          -no-cups -qt-libjpeg -qt-freetype -qt-harfbuzz -qt-pcre \
-          -no-feature-webengine-pepper -no-feature-webengine-proprietary-codecs \
-          -no-feature-webengine-system-libvpx -no-feature-webengine-system-ffmpeg
+          -skip qtscript -skip qtsvg -skip qttools -skip qtwebengine \
+          -qt-zlib -qt-libpng -no-cups -qt-libjpeg -qt-freetype -qt-harfbuzz -qt-pcre
         cmake --build . --parallel $(nproc)
         sudo cmake --install .
         cat config.summary
         [ -f config.log ] && tail -n 50 config.log || true
+
+    - name: Build static QtWebEngine separately
+      run: |
+        cd qt-everywhere-src-6.2.4/qtwebengine
+        # Patch configure.cmake to skip ulimit check
+        sed -i 's/check_for_ulimit()/# Patched out check_for_ulimit/g' configure.cmake
+        /opt/qt6-static/bin/qt-configure-module . \
+          -static -prefix /opt/qt6-static -opensource -confirm-license \
+          -no-feature-webengine-pepper -no-feature-webengine-proprietary-codecs \
+          -no-feature-webengine-system-libvpx -no-feature-webengine-system-ffmpeg
+        cmake --build . --parallel $(nproc)
+        sudo cmake --install .
+        cd ..
         rm -rf qt-everywhere-src-6.2.4
 
     - name: Build minimal static FFmpeg
