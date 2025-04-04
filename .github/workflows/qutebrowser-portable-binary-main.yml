@@ -70,11 +70,10 @@ jobs:
         tar xf qt-everywhere-src-5.15.2.tar.xz
         cd qt-everywhere-src-5.15.2
         ./configure -static -prefix /opt/qt-static -opensource -confirm-license \
-          -release -optimize-size -no-opengl -no-dbus -no-icu -no-fontconfig \
-          -no-feature-fontconfig -no-feature-dbus -no-feature-glib \
-          -skip qt3d -skip qtmultimedia -skip qtscript -skip qtsvg -skip qttools \
-          -xcb -qt-zlib -qt-libpng -no-cups -no-feature-xcb-glx -qt-xcb \
-          -qt-libjpeg -qt-freetype -qt-harfbuzz -qt-pcre
+          -release -optimize-size -no-opengl -no-icu -no-feature-fontconfig \
+          -no-feature-dbus -no-feature-glib -skip qt3d -skip qtmultimedia \
+          -skip qtscript -skip qtsvg -skip qttools -xcb -qt-xcb -qt-zlib \
+          -qt-libpng -no-cups -qt-libjpeg -qt-freetype -qt-harfbuzz -qt-pcre
         make -j$(nproc)
         sudo make install
         cat config.summary
