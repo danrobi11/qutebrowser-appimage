@@ -1,4 +1,4 @@
-name: Build qutebrowser with QEMU and glibc static #11
+name: Build qutebrowser with QEMU and glibc static #12
 
 on:
   push:
@@ -68,7 +68,7 @@ jobs:
       run: |
         wget https://download.qt.io/archive/qt/5.15/5.15.2/single/qt-everywhere-src-5.15.2.tar.xz
         tar xf qt-everywhere-src-5.15.2.tar.xz
-        cd qt-everywhere-src-5. makes15.2
+        cd qt-everywhere-src-5.15.2
         ./configure -static -prefix /opt/qt-static -opensource -confirm-license \
           -release -optimize-size -no-opengl -no-dbus -no-icu -no-fontconfig \
           -skip qt3d -skip qtmultimedia -skip qtscript -skip qtsvg -skip qttools \
