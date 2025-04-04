@@ -1,4 +1,4 @@
-name: Build qutebrowser with QEMU and glibc static
+name: Build qutebrowser with QEMU and glibc static #3
 
 on:
   push:
@@ -52,7 +52,7 @@ jobs:
           -release -optimize-size -no-opengl -no-dbus -no-icu -no-fontconfig \
           -skip qt3d -skip qtmultimedia -skip qtdeclarative -skip qtlocation \
           -skip qtscript -skip qtsensors -skip qtsvg -skip qttools -skip qtwayland \
-          -skip qtxmlpatterns -xcb -qt-zlib -qt-libpng -no-feature-printsupport
+          -skip qtxmlpatterns -skip qtprintsupport -xcb -qt-zlib -qt-libpng
         make -j$(nproc)
         sudo make install
         rm -rf qt-everywhere-src-5.15.2
