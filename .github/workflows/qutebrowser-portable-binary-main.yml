@@ -16,12 +16,11 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Increase File Descriptor Limit
-      run: sudo sysctl -w fs.file-max=100000 && ulimit -n 4096 # Needed for QtWebEngine build
+      run: sudo sysctl -w fs.file-max=100000 && ulimit -n 4096
 
     - name: Install build dependencies
       run: |
         sudo apt-get update
-        # Combine package list onto fewer lines to avoid backslash issues
         sudo apt-get install -y --no-install-recommends \
           build-essential cmake git wget xz-utils ca-certificates \
           python3-dev python3-pip python3-venv python3-html5lib \
@@ -47,11 +46,11 @@ jobs:
         echo "QTDIR=/opt/qt6-static" >> $GITHUB_ENV
         echo "PATH=/opt/qt6-static/bin:$PATH" >> $GITHUB_ENV
         echo "PKG_CONFIG_PATH=/opt/ffmpeg-static/lib/pkgconfig:/opt/qt6-static/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
-        echo "LD_LIBRARY_PATH=/opt/ffmpeg-static/lib:/opt/qt6-static/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV # May help tools find libs
+        echo "LD_LIBRARY_PATH=/opt/ffmpeg-static/lib:/opt/qt6-static/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
         echo "QT_PLUGIN_PATH=/opt/qt6-static/plugins" >> $GITHUB_ENV
-        echo "QUTEBROWSER_VERSION=v3.2.0" >> $GITHUB_ENV # Use a recent version compatible with Qt6
-        echo "QT_VERSION=6.6.3" >> $GITHUB_ENV # Use a recent Qt6 version
-        echo "FFMPEG_VERSION=n6.1.1" >> $GITHUB_ENV # Use a recent FFmpeg version
+        echo "QUTEBROWSER_VERSION=v3.2.0" >> $GITHUB_ENV
+        echo "QT_VERSION=6.6.3" >> $GITHUB_ENV
+        echo "FFMPEG_VERSION=n6.1.1" >> $GITHUB_ENV
 
     - name: Upgrade pip
       run: |
@@ -59,7 +58,6 @@ jobs:
 
     # --- Build FFmpeg First ---
     - name: Build static FFmpeg (with x264, vpx)
-      timeout-minutes: 60 # Generous timeout for FFmpeg
       run: |
         git clone --depth 1 --branch ${{ env.FFMPEG_VERSION }} https://git.ffmpeg.org/ffmpeg.git
         cd ffmpeg
@@ -67,43 +65,22 @@ jobs:
           --prefix=/opt/ffmpeg-static \
           --pkg-config-flags="--static" \
           --extra-libs="-lpthread -lm -lz" \
-          --enable-static \
-          --disable-shared \
-          --disable-programs \
-          --disable-doc \
-          --disable-avdevice \
-          --disable-postproc \
-          --enable-gpl \
-          --enable-libx264 \
-          --enable-libvpx \
-          --enable-decoder=aac \
-          --enable-decoder=h264 \
-          --enable-decoder=vp8 \
-          --enable-decoder=vp9 \
-          --enable-decoder=theora \
-          --enable-decoder=opus \
-          --enable-decoder=vorbis \
-          --enable-demuxer=aac \
-          --enable-demuxer=flv \
-          --enable-demuxer=hls \
-          --enable-demuxer=matroska \
-          --enable-demuxer=mov \
-          --enable-demuxer=mp3 \
-          --enable-demuxer=ogg \
-          --enable-demuxer=wav \
-          --enable-protocol=file \
-          --enable-protocol=http \
-          --enable-protocol=https \
-          --enable-protocol=tcp \
-          --enable-protocol=tls \
-          --enable-protocol=udp
-        make -j$(nproc) # Use nproc here, usually fine for FFmpeg
+          --enable-static --disable-shared \
+          --disable-programs --disable-doc --disable-avdevice --disable-postproc \
+          --enable-gpl --enable-libx264 --enable-libvpx \
+          --enable-decoder=aac --enable-decoder=h264 --enable-decoder=vp8 --enable-decoder=vp9 \
+          --enable-decoder=theora --enable-decoder=opus --enable-decoder=vorbis \
+          --enable-demuxer=aac --enable-demuxer=flv --enable-demuxer=hls \
+          --enable-demuxer=matroska --enable-demuxer=mov --enable-demuxer=mp3 \
+          --enable-demuxer=ogg --enable-demuxer=wav \
+          --enable-protocol=file --enable-protocol=http --enable-protocol=https \
+          --enable-protocol=tcp --enable-protocol=tls --enable-protocol=udp
+        make -j$(nproc)
         sudo make install
         cd ..
 
     # --- Phase 1: Build Static Qt Base/Core (Skipping WebEngine) ---
     - name: Download and build static Qt base/core
-      timeout-minutes: 180 # Set a 3-hour timeout for this potentially long step
       run: |
         bash -ec '
         set -e
@@ -123,13 +100,9 @@ jobs:
         echo "Changed directory to $(pwd)"
         if [ ! -f ./configure ]; then echo "ERROR: ./configure script not found in $(pwd)"; ls -lha; exit 1; fi
         chmod +x ./configure
-        echo "First few lines of ./configure script:"
-        head -n 5 ./configure || echo "Could not read start of ./configure"
-        echo "Listing directory contents before configure:"
-        ls -la
 
         echo "Running Qt configure (Phase 1: Base)..."
-        set -x
+        # No set -x here, too noisy for configure itself
         ./configure \
             -static \
             -prefix /opt/qt6-static \
@@ -154,7 +127,6 @@ jobs:
             -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtquick3dphysics \
             -skip qtpdf
         _configure_exit_code=$?
-        set +x
 
         if [ $_configure_exit_code -ne 0 ]; then
           echo "ERROR: Qt configure (Phase 1) failed with exit code $_configure_exit_code."
@@ -163,20 +135,13 @@ jobs:
         fi
         cat config.summary || true
 
-        echo "Building configured Qt modules (Phase 1)... Limiting jobs and enabling verbose Ninja."
-        # --- FIXED: Limit parallel jobs and add Ninja verbosity ---
-        cmake --build . --parallel 2 -- -v
-        if [ $? -ne 0 ]; then
-          echo "ERROR: Qt build (Phase 1) failed."
-          exit 1
-        fi
+        echo "Building configured Qt modules (Phase 1)..."
+        cmake --build . --parallel 2 # Reduced parallelism
+        if [ $? -ne 0 ]; then echo "ERROR: Qt build (Phase 1) failed."; exit 1; fi
 
         echo "Installing Qt (Phase 1)..."
         sudo cmake --install . --prefix /opt/qt6-static
-        if [ $? -ne 0 ]; then
-          echo "ERROR: Qt install (Phase 1) failed."
-          exit 1
-        fi
+        if [ $? -ne 0 ]; then echo "ERROR: Qt install (Phase 1) failed."; exit 1; fi
         echo "Qt Base Install directory listing:"
         sudo ls -lha /opt/qt6-static/bin || true
 
@@ -184,11 +149,12 @@ jobs:
 
     # --- Phase 2: Build Static QtWebEngine ---
     - name: Build static QtWebEngine (using custom FFmpeg)
-      timeout-minutes: 240 # Very long timeout for WebEngine
       env:
         LDFLAGS: "-L/opt/ffmpeg-static/lib -L/opt/qt6-static/lib"
         CPPFLAGS: "-I/opt/ffmpeg-static/include -I/opt/qt6-static/include"
       run: |
+        bash -ec '
+        set -e
         echo "Configuring QtWebEngine (Phase 2)..."
         if [ ! -f /opt/qt6-static/bin/qt-configure-module ]; then
             echo "ERROR: /opt/qt6-static/bin/qt-configure-module not found after Phase 1 install."
@@ -197,38 +163,41 @@ jobs:
         fi
 
         cd qt-everywhere-src-${{ env.QT_VERSION }}/qtwebengine
+
+        echo "Cleaning previous CMake cache (if any)..."
+        rm -f CMakeCache.txt || true
+
+        # Configure QtWebEngine module using the installed static Qt base
+        echo "Running qt-configure-module for WebEngine..."
+        # Use confirmed correct flags
+        set -x
         /opt/qt6-static/bin/qt-configure-module . \
-          -webengine-ffmpeg=system \
+          -feature-webengine-system-ffmpeg \
           -feature-webengine-proprietary-codecs \
           -no-feature-webengine-pulse-audio
+        _configure_exit_code=$?
+        set +x
 
-        if [ $? -ne 0 ]; then
-          echo "ERROR: QtWebEngine configure (Phase 2) failed."
+        if [ $_configure_exit_code -ne 0 ]; then
+          echo "ERROR: QtWebEngine configure (Phase 2) failed with exit code $_configure_exit_code."
           find . -name "CMakeOutput.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
           find . -name "CMakeError.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
           exit 1
         fi
 
-        echo "Building QtWebEngine (Phase 2)... Limiting jobs and enabling verbose Ninja."
-        # --- FIXED: Limit parallel jobs and add Ninja verbosity ---
-        cmake --build . --parallel 2 -- -v
-        if [ $? -ne 0 ]; then
-          echo "ERROR: QtWebEngine build (Phase 2) failed."
-          exit 1
-        fi
+        echo "Building QtWebEngine (Phase 2)..."
+        cmake --build . --parallel 2 # Reduced parallelism
+        if [ $? -ne 0 ]; then echo "ERROR: QtWebEngine build (Phase 2) failed."; exit 1; fi
 
         echo "Installing QtWebEngine (Phase 2)..."
         sudo cmake --install . --prefix /opt/qt6-static
-        if [ $? -ne 0 ]; then
-          echo "ERROR: QtWebEngine install (Phase 2) failed."
-          exit 1
-        fi
+        if [ $? -ne 0 ]; then echo "ERROR: QtWebEngine install (Phase 2) failed."; exit 1; fi
         cd ../..
-        # rm -rf qt-everywhere-src-${{ env.QT_VERSION }}
+
+        ' # End of bash block
 
     # --- Build PyQt6 against Static Qt ---
     - name: Build PyQt6 and PyQt6-WebEngine from source
-      timeout-minutes: 120 # Long timeout for PyQt build
       env:
         QT_SELECT: qt6
       run: |
@@ -237,7 +206,6 @@ jobs:
         qmake -v
 
         echo "Attempting to build PyQt6 and PyQt6-WebEngine from source..."
-        # Consider adding --parallel N to build_ext if supported and needed
         python3 -m pip install --no-cache-dir --verbose --no-binary :all: \
           --config-settings="--qmake=/opt/qt6-static/bin/qmake" \
           PyQt6 PyQt6-sip PyQt6-WebEngine
@@ -259,7 +227,6 @@ jobs:
         rm requirements-no-pyqt.txt
 
     - name: Package Qutebrowser with PyInstaller
-      timeout-minutes: 60 # PyInstaller can take time
       run: |
         cd qutebrowser
         echo "Running PyInstaller..."
@@ -292,84 +259,49 @@ jobs:
         cd ..
 
     - name: Create run script
-      # (run script content remains the same)
       run: |
         cat > run-qutebrowser.sh << 'EOF'
         #!/bin/bash
-        set -e # Exit on error
+        set -e
 
         SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-        QUTEBROWSER_APP="$SCRIPT_DIR/qutebrowser" # PyInstaller executable
+        QUTEBROWSER_APP="$SCRIPT_DIR/qutebrowser"
         QEMU_BIN="$SCRIPT_DIR/qemu-x86_64-static"
 
-        # Check for QEMU and App
-        if [ ! -f "$QEMU_BIN" ]; then
-          echo "Error: QEMU binary '$QEMU_BIN' not found."
-          exit 1
-        fi
-        if [ ! -f "$QUTEBROWSER_APP" ]; then
-          echo "Error: Qutebrowser application '$QUTEBROWSER_APP' not found."
-          exit 1
-        fi
+        if [ ! -f "$QEMU_BIN" ]; then echo "Error: QEMU binary '$QEMU_BIN' not found."; exit 1; fi
+        if [ ! -f "$QUTEBROWSER_APP" ]; then echo "Error: Qutebrowser application '$QUTEBROWSER_APP' not found."; exit 1; fi
         chmod +x "$QEMU_BIN" "$QUTEBROWSER_APP" 2>/dev/null
 
-        # Prepare Environment for QEMU User Mode
         QEMU_ARGS=()
 
-        # X11 Forwarding
         if [ -n "$DISPLAY" ]; then
           echo "Setting up X11 forwarding for DISPLAY=$DISPLAY"
-          # QEMU needs the DISPLAY env var set to the host:port format
-          # Assume standard formats like :0, :0.0, unix:0, hostname:0
           QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY")
-
-          # Determine X11 socket directory based on DISPLAY
-          X11_SOCKET_DIR="/tmp/.X11-unix" # Default assumption
-          if [[ "$DISPLAY" == /* ]]; then # Absolute path socket (e.g. /tmp/.X11-unix/X0)
-             X11_SOCKET_DIR=$(dirname "$DISPLAY")
-          elif [[ "$DISPLAY" == unix:* ]]; then # unix: socket format
-             : # Keep default /tmp/.X11-unix
-          else # Standard :0, hostname:0 format
-             : # Keep default /tmp/.X11-unix
-          fi
-
-          # Mount the socket directory if it exists
-          if [ -d "$X11_SOCKET_DIR" ]; then
-             QEMU_ARGS+=("-v" "$X11_SOCKET_DIR:$X11_SOCKET_DIR")
-          else
-             echo "Warning: X11 socket directory '$X11_SOCKET_DIR' not found."
-          fi
-
-          # Handle Xauthority
+          X11_SOCKET_DIR="/tmp/.X11-unix"
+          if [[ "$DISPLAY" == /* ]]; then X11_SOCKET_DIR=$(dirname "$DISPLAY"); fi
+          if [ -d "$X11_SOCKET_DIR" ]; then QEMU_ARGS+=("-v" "$X11_SOCKET_DIR:$X11_SOCKET_DIR"); else echo "Warning: X11 socket directory '$X11_SOCKET_DIR' not found."; fi
           XAUTH_FILE="${XAUTHORITY:-$HOME/.Xauthority}"
           if [ -f "$XAUTH_FILE" ]; then
             echo "Using Xauthority file: $XAUTH_FILE"
-            QEMU_ARGS+=("-E" "XAUTHORITY=/tmp/guest.Xauthority") # Use a fixed path inside QEMU
-            QEMU_ARGS+=("-v" "$XAUTH_FILE:/tmp/guest.Xauthority:ro") # Map it read-only
+            QEMU_ARGS+=("-E" "XAUTHORITY=/tmp/guest.Xauthority")
+            QEMU_ARGS+=("-v" "$XAUTH_FILE:/tmp/guest.Xauthority:ro")
           else
-            echo "Warning: XAUTHORITY file '$XAUTH_FILE' not found. X11 authentication may fail."
+            echo "Warning: XAUTHORITY file '$XAUTH_FILE' not found."
           fi
         else
-          echo "Error: DISPLAY environment variable is not set. Cannot run graphical application."
+          echo "Error: DISPLAY environment variable is not set."
           exit 1
         fi
 
-        # Home Directory Access (QEMU inherits filesystem access, just pass env var)
         QEMU_ARGS+=("-E" "HOME=$HOME")
-        # Also pass USER and LOGNAME for completeness
         QEMU_ARGS+=("-E" "USER=$USER")
         QEMU_ARGS+=("-E" "LOGNAME=$LOGNAME")
-
-        # Pass Qt specific environment variables that might be needed inside QEMU
-        QEMU_ARGS+=("-E" "QT_PLUGIN_PATH=/qt6/plugins") # Path needs to match PyInstaller '--add-data' dest
-        QEMU_ARGS+=("-E" "QT_QPA_PLATFORM=xcb") # Explicitly set platform plugin
+        QEMU_ARGS+=("-E" "QT_PLUGIN_PATH=/qt6/plugins")
+        QEMU_ARGS+=("-E" "QT_QPA_PLATFORM=xcb")
         QEMU_ARGS+=("-E" "QTWEBENGINEPROCESS_PATH=/qt6/libexec/QtWebEngineProcess")
-
-        # Fontconfig Cache
         QEMU_ARGS+=("-E" "XDG_CACHE_HOME=$HOME/.cache")
-        QEMU_ARGS+=("-E" "FONTCONFIG_PATH=/etc/fonts") # Standard host path might be needed
+        QEMU_ARGS+=("-E" "FONTCONFIG_PATH=/etc/fonts")
 
-        # Sound (Pulseaudio/Pipewire via socket)
         if [ -n "$XDG_RUNTIME_DIR" ]; then
           PULSE_SOCKET="$XDG_RUNTIME_DIR/pulse/native"
           PIPEWIRE_SOCKET="$XDG_RUNTIME_DIR/pipewire-0"
@@ -385,15 +317,12 @@ jobs:
           echo "Warning: XDG_RUNTIME_DIR not set, cannot forward PulseAudio/PipeWire sockets."
         fi
 
-        # Locale settings from host
         QEMU_ARGS+=("-E" "LANG=${LANG:-C.UTF-8}")
         QEMU_ARGS+=("-E" "LC_ALL=${LC_ALL}")
         QEMU_ARGS+=("-E" "LANGUAGE=${LANGUAGE}")
 
         echo "Starting Qutebrowser via QEMU..."
-        # Pass remaining arguments "$@" to qutebrowser
         "$QEMU_BIN" "${QEMU_ARGS[@]}" "$QUTEBROWSER_APP" "$@"
-
         EOF
         chmod +x run-qutebrowser.sh
 
