@@ -25,8 +25,8 @@ jobs:
           libssl-dev zlib1g-dev libpng-dev \
           qemu-user \
           g++-10 \
-          libxcb1-dev libxcb-xinerama0-dev libxcb-xkb-dev libxkbcommon-x11-dev \  # XCB deps
-          gperf bison flex  # WebEngine tools
+          libxcb1-dev libxcb-xinerama0-dev libxcb-xkb-dev libxkbcommon-x11-dev \
+          gperf bison flex  # WebEngine tools, no trailing \
         sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-10 100
         sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-10 100
 
