@@ -20,6 +20,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y \
           build-essential \
+          cmake \
           git \
           wget \
           xz-utils \
@@ -75,9 +76,11 @@ jobs:
           -release -optimize-size -no-opengl -no-icu -no-feature-fontconfig \
           -no-feature-dbus -no-feature-glib -skip qt3d -skip qtmultimedia \
           -skip qtscript -skip qtsvg -skip qttools -qt-zlib -qt-libpng \
-          -no-cups -qt-libjpeg -qt-freetype -qt-harfbuzz -qt-pcre
-        make -j$(nproc)
-        sudo make install
+          -no-cups -qt-libjpeg -qt-freetype -qt-harfbuzz -qt-pcre \
+          -no-feature-webengine-pepper -no-feature-webengine-proprietary-codecs \
+          -no-feature-webengine-system-libvpx -no-feature-webengine-system-ffmpeg
+        cmake --build . --parallel $(nproc)
+        sudo cmake --install .
         cat config.summary
         [ -f config.log ] && tail -n 50 config.log || true
         rm -rf qt-everywhere-src-6.2.4
