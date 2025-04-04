@@ -59,6 +59,7 @@ jobs:
 
     # --- Build FFmpeg First ---
     - name: Build static FFmpeg (with x264, vpx)
+      timeout-minutes: 60 # Generous timeout for FFmpeg
       run: |
         git clone --depth 1 --branch ${{ env.FFMPEG_VERSION }} https://git.ffmpeg.org/ffmpeg.git
         cd ffmpeg
@@ -96,55 +97,39 @@ jobs:
           --enable-protocol=tcp \
           --enable-protocol=tls \
           --enable-protocol=udp
-        make -j$(nproc)
+        make -j$(nproc) # Use nproc here, usually fine for FFmpeg
         sudo make install
         cd ..
-        # rm -rf ffmpeg # Keep source for potential debugging if needed later
 
     # --- Phase 1: Build Static Qt Base/Core (Skipping WebEngine) ---
     - name: Download and build static Qt base/core
+      timeout-minutes: 180 # Set a 3-hour timeout for this potentially long step
       run: |
-        bash -ec ' # Force explicit bash execution, exit on error (-e), trace commands (-c would require argument, so do it manually later)
-        set -e # Exit on error
+        bash -ec '
+        set -e
 
-        # Extract major.minor version (e.g., 6.6 from 6.6.3)
         QT_MAJOR_MINOR="${QT_VERSION%.*}"
         QT_DOWNLOAD_URL="https://download.qt.io/archive/qt/${QT_MAJOR_MINOR}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz"
-
         echo "Downloading Qt from: ${QT_DOWNLOAD_URL}"
-        wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL}"
-        if [ $? -ne 0 ]; then
-          echo "Error: Failed to download Qt source from download.qt.io."
-          QT_DOWNLOAD_URL_FALLBACK="https://archive.qt.io/archive/qt/${QT_MAJOR_MINOR}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz"
-          echo "Attempting fallback download from: ${QT_DOWNLOAD_URL_FALLBACK}"
-          wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL_FALLBACK}"
-          if [ $? -ne 0 ]; then
-             echo "Error: Fallback download also failed. Aborting."
-             exit 1
-          fi
-        fi
+        wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL}" || \
+          ( echo "Error: Failed to download Qt source from download.qt.io. Trying fallback..." && \
+            QT_DOWNLOAD_URL_FALLBACK="https://archive.qt.io/archive/qt/${QT_MAJOR_MINOR}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz" && \
+            wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL_FALLBACK}" )
+        if [ $? -ne 0 ]; then echo "Error: All downloads failed. Aborting."; exit 1; fi
 
         echo "Extracting Qt source..."
         tar xf qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz
         cd qt-everywhere-src-${{ env.QT_VERSION }}
         echo "Changed directory to $(pwd)"
-        if [ ! -f ./configure ]; then
-          echo "ERROR: ./configure script not found in $(pwd)"
-          ls -lha
-          exit 1
-        fi
+        if [ ! -f ./configure ]; then echo "ERROR: ./configure script not found in $(pwd)"; ls -lha; exit 1; fi
         chmod +x ./configure
-
         echo "First few lines of ./configure script:"
         head -n 5 ./configure || echo "Could not read start of ./configure"
-
         echo "Listing directory contents before configure:"
         ls -la
 
         echo "Running Qt configure (Phase 1: Base)..."
-        set -x # Enable command tracing
-        # Execute configure directly, pass args. Ensure no weird shell interpretation.
-        # Still use backslashes for readability here, should be ok within bash -ec ''
+        set -x
         ./configure \
             -static \
             -prefix /opt/qt6-static \
@@ -159,44 +144,17 @@ jobs:
             -no-cups \
             -no-feature-qdoc \
             -skip qtwebengine \
-            -skip qt3d \
-            -skip qtactiveqt \
-            -skip qtcharts \
-            -skip qtcoap \
-            -skip qtconnectivity \
-            -skip qtdatavis3d \
-            -skip qtdoc \
-            -skip qtgraphs \
-            -skip qthttpserver \
-            -skip qtlocation \
-            -skip qtlottie \
-            -skip qtmqtt \
-            -skip qtmultimedia \
-            -skip qtnetworkauth \
-            -skip qtopcua \
-            -skip qtpositioning \
-            -skip qtquick3d \
-            -skip qtquicktimeline \
-            -skip qtremoteobjects \
-            -skip qtscxml \
-            -skip qtsensors \
-            -skip qtserialbus \
-            -skip qtserialport \
-            -skip qtspeech \
-            -skip qtsvg \
-            -skip qttools \
-            -skip qttranslations \
-            -skip qtvirtualkeyboard \
-            -skip qtwayland \
-            -skip qtwebchannel \
-            -skip qtwebglplugin \
-            -skip qtwebsockets \
-            -skip qtwebview \
-            -skip qtquick3dphysics \
+            -skip qt3d -skip qtactiveqt -skip qtcharts -skip qtcoap -skip qtconnectivity \
+            -skip qtdatavis3d -skip qtdoc -skip qtgraphs -skip qthttpserver \
+            -skip qtlocation -skip qtlottie -skip qtmqtt -skip qtmultimedia \
+            -skip qtnetworkauth -skip qtopcua -skip qtpositioning -skip qtquick3d \
+            -skip qtquicktimeline -skip qtremoteobjects -skip qtscxml -skip qtsensors \
+            -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtsvg -skip qttools \
+            -skip qttranslations -skip qtvirtualkeyboard -skip qtwayland -skip qtwebchannel \
+            -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtquick3dphysics \
             -skip qtpdf
-
         _configure_exit_code=$?
-        set +x # Disable tracing
+        set +x
 
         if [ $_configure_exit_code -ne 0 ]; then
           echo "ERROR: Qt configure (Phase 1) failed with exit code $_configure_exit_code."
@@ -205,8 +163,9 @@ jobs:
         fi
         cat config.summary || true
 
-        echo "Building configured Qt modules (Phase 1)..."
-        cmake --build . --parallel $(nproc)
+        echo "Building configured Qt modules (Phase 1)... Limiting jobs and enabling verbose Ninja."
+        # --- FIXED: Limit parallel jobs and add Ninja verbosity ---
+        cmake --build . --parallel 2 -- -v
         if [ $? -ne 0 ]; then
           echo "ERROR: Qt build (Phase 1) failed."
           exit 1
@@ -225,13 +184,12 @@ jobs:
 
     # --- Phase 2: Build Static QtWebEngine ---
     - name: Build static QtWebEngine (using custom FFmpeg)
+      timeout-minutes: 240 # Very long timeout for WebEngine
       env:
-        # Ensure compiler/linker flags point to static libs if needed
         LDFLAGS: "-L/opt/ffmpeg-static/lib -L/opt/qt6-static/lib"
         CPPFLAGS: "-I/opt/ffmpeg-static/include -I/opt/qt6-static/include"
       run: |
         echo "Configuring QtWebEngine (Phase 2)..."
-        # Check if qt-configure-module exists
         if [ ! -f /opt/qt6-static/bin/qt-configure-module ]; then
             echo "ERROR: /opt/qt6-static/bin/qt-configure-module not found after Phase 1 install."
             sudo find /opt/qt6-static -name qt-configure-module
@@ -239,7 +197,6 @@ jobs:
         fi
 
         cd qt-everywhere-src-${{ env.QT_VERSION }}/qtwebengine
-        # Configure QtWebEngine module using the installed static Qt base
         /opt/qt6-static/bin/qt-configure-module . \
           -webengine-ffmpeg=system \
           -feature-webengine-proprietary-codecs \
@@ -247,14 +204,14 @@ jobs:
 
         if [ $? -ne 0 ]; then
           echo "ERROR: QtWebEngine configure (Phase 2) failed."
-          # Look for CMake logs within the qtwebengine directory
           find . -name "CMakeOutput.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
           find . -name "CMakeError.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
           exit 1
         fi
 
-        echo "Building QtWebEngine (Phase 2)..."
-        cmake --build . --parallel $(nproc)
+        echo "Building QtWebEngine (Phase 2)... Limiting jobs and enabling verbose Ninja."
+        # --- FIXED: Limit parallel jobs and add Ninja verbosity ---
+        cmake --build . --parallel 2 -- -v
         if [ $? -ne 0 ]; then
           echo "ERROR: QtWebEngine build (Phase 2) failed."
           exit 1
@@ -266,51 +223,46 @@ jobs:
           echo "ERROR: QtWebEngine install (Phase 2) failed."
           exit 1
         fi
-        cd ../.. # Go back to the main build directory
-        # rm -rf qt-everywhere-src-${{ env.QT_VERSION }} # Keep source for potential debugging
+        cd ../..
+        # rm -rf qt-everywhere-src-${{ env.QT_VERSION }}
 
     # --- Build PyQt6 against Static Qt ---
     - name: Build PyQt6 and PyQt6-WebEngine from source
+      timeout-minutes: 120 # Long timeout for PyQt build
       env:
-        QT_SELECT: qt6 # Help tools find the correct Qt version
+        QT_SELECT: qt6
       run: |
-        # Ensure qmake from our static build is used
         export PATH="/opt/qt6-static/bin:$PATH"
         echo "Using qmake: $(which qmake)"
         qmake -v
 
-        # Build PyQt6 - this will take time
         echo "Attempting to build PyQt6 and PyQt6-WebEngine from source..."
-        # Added --config-settings to explicitly point to static qmake
+        # Consider adding --parallel N to build_ext if supported and needed
         python3 -m pip install --no-cache-dir --verbose --no-binary :all: \
           --config-settings="--qmake=/opt/qt6-static/bin/qmake" \
           PyQt6 PyQt6-sip PyQt6-WebEngine
 
-        # Verify installation (optional but recommended)
         echo "Verifying PyQt6 installation..."
         python3 -c "from PyQt6 import QtCore; from PyQt6.QtCore import QT_VERSION_STR; print(f'PyQt6 QtCore OK, Qt Version: {QT_VERSION_STR}')"
         python3 -c "from PyQt6 import QtWebEngineCore; print('PyQt6 QtWebEngineCore OK')"
         python3 -c "from PyQt6 import QtWebEngineWidgets; print('PyQt6 QtWebEngineWidgets OK')"
 
-
     # --- Prepare and Package Qutebrowser ---
     - name: Install PyInstaller and Clone Qutebrowser
       run: |
-        python3 -m pip install --no-cache-dir pyinstaller==6.6.0 # Use a recent stable version
+        python3 -m pip install --no-cache-dir pyinstaller==6.6.0
         git clone --depth 1 --branch ${{ env.QUTEBROWSER_VERSION }} https://github.com/qutebrowser/qutebrowser.git
         cd qutebrowser
-        # Install Qutebrowser runtime dependencies (excluding PyQt which we built)
         echo "Installing qutebrowser dependencies..."
-        # Create a temporary requirements file without PyQt lines
         grep -vE '^PyQt6|^PyQt6-WebEngine|^PyQt6-sip' requirements/requirements.txt > requirements-no-pyqt.txt
-        python3 -m pip install --no-cache-dir -r requirements-no-pyqt.txt --ignore-installed # Ignore system packages
+        python3 -m pip install --no-cache-dir -r requirements-no-pyqt.txt --ignore-installed
         rm requirements-no-pyqt.txt
 
     - name: Package Qutebrowser with PyInstaller
+      timeout-minutes: 60 # PyInstaller can take time
       run: |
         cd qutebrowser
         echo "Running PyInstaller..."
-        # Destination paths (after ':') are relative to the PyInstaller bundle root
         pyinstaller --noconfirm --log-level=INFO \
           --name qutebrowser \
           --onefile \
@@ -324,7 +276,7 @@ jobs:
           --add-data "/opt/qt6-static/plugins/imageformats:qt6/plugins/imageformats" \
           --add-data "/opt/qt6-static/plugins/tls:qt6/plugins/tls" \
           --add-data "/opt/qt6-static/plugins/xcbglintegrations:qt6/plugins/xcbglintegrations" \
-          --add-data "/opt/qt6-static/libexec:qt6/libexec" \ # QtWebEngineProcess
+          --add-data "/opt/qt6-static/libexec:qt6/libexec" \
           --hidden-import="pkg_resources.py2_warn" \
           --hidden-import="pkg_resources.markers" \
           --hidden-import="qutebrowser.app" \
@@ -333,13 +285,14 @@ jobs:
           --hidden-import="PyQt6.sip" \
           --hidden-import="PyQt6.QtWebEngineWidgets" \
           --hidden-import="PyQt6.QtQuick" \
-          --hidden-import="PyQt6.QtOpenGLWidgets" # Often needed with WebEngine
+          --hidden-import="PyQt6.QtOpenGLWidgets" \
           qutebrowser/__main__.py
         echo "PyInstaller finished."
-        ls -l dist/ # Check output
+        ls -l dist/
         cd ..
 
     - name: Create run script
+      # (run script content remains the same)
       run: |
         cat > run-qutebrowser.sh << 'EOF'
         #!/bin/bash
@@ -446,24 +399,17 @@ jobs:
 
     - name: Bundle package
       run: |
-        # Copy the static QEMU binary
         cp /usr/bin/qemu-x86_64-static .
-
-        # Create the package directory
         mkdir qutebrowser-qemu-pkg
-        mv qutebrowser/dist/qutebrowser qutebrowser-qemu-pkg/ # Move PyInstaller executable
+        mv qutebrowser/dist/qutebrowser qutebrowser-qemu-pkg/
         mv qemu-x86_64-static qutebrowser-qemu-pkg/
         mv run-qutebrowser.sh qutebrowser-qemu-pkg/
-
-        # Archive the package directory
         tar -czf qutebrowser-qemu.tar.gz qutebrowser-qemu-pkg
         echo "--- Package Contents ---"
         tar -tvf qutebrowser-qemu.tar.gz
         echo "------------------------"
         ls -lh qutebrowser-qemu.tar.gz
-        # Estimate uncompressed size (approximate)
         tar -ztvf qutebrowser-qemu.tar.gz | awk '{sum+=$3} END {printf "Estimated Uncompressed Size: %.2f MB\n", sum/1024/1024}'
-
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
