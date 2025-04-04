@@ -74,15 +74,27 @@ jobs:
           --enable-gpl \
           --enable-libx264 \
           --enable-libvpx \
-          # Add other needed decoders/demuxers/protocols for web compatibility
-          --enable-decoder=aac --enable-decoder=h264 --enable-decoder=vp8 \
-          --enable-decoder=vp9 --enable-decoder=theora --enable-decoder=opus \
+          --enable-decoder=aac \
+          --enable-decoder=h264 \
+          --enable-decoder=vp8 \
+          --enable-decoder=vp9 \
+          --enable-decoder=theora \
+          --enable-decoder=opus \
           --enable-decoder=vorbis \
-          --enable-demuxer=aac --enable-demuxer=flv --enable-demuxer=hls \
-          --enable-demuxer=matroska --enable-demuxer=mov --enable-demuxer=mp3 \
-          --enable-demuxer=ogg --enable-demuxer=wav \
-          --enable-protocol=file --enable-protocol=http --enable-protocol=https \
-          --enable-protocol=tcp --enable-protocol=tls --enable-protocol=udp
+          --enable-demuxer=aac \
+          --enable-demuxer=flv \
+          --enable-demuxer=hls \
+          --enable-demuxer=matroska \
+          --enable-demuxer=mov \
+          --enable-demuxer=mp3 \
+          --enable-demuxer=ogg \
+          --enable-demuxer=wav \
+          --enable-protocol=file \
+          --enable-protocol=http \
+          --enable-protocol=https \
+          --enable-protocol=tcp \
+          --enable-protocol=tls \
+          --enable-protocol=udp
         make -j$(nproc)
         sudo make install
         cd ..
