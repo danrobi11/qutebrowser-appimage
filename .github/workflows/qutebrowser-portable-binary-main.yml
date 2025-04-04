@@ -39,7 +39,7 @@ jobs:
           libasound2-dev libpulse-dev \
           libnss3-dev \
           python3-pyqt6.sip \
-          libclang-15-dev # <-- FIXED: Added libclang dev package
+          libclang-15-dev
         echo "Finished installing dependencies."
 
     - name: Set Environment Variables
@@ -112,7 +112,6 @@ jobs:
         wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL}"
         if [ $? -ne 0 ]; then
           echo "Error: Failed to download Qt source from download.qt.io."
-          # Try archive.qt.io as a fallback (sometimes download.qt.io has issues)
           QT_DOWNLOAD_URL_FALLBACK="https://archive.qt.io/archive/qt/${QT_MAJOR_MINOR}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz"
           echo "Attempting fallback download from: ${QT_DOWNLOAD_URL_FALLBACK}"
           wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL_FALLBACK}"
@@ -122,57 +121,53 @@ jobs:
           fi
         fi
 
+        echo "Extracting Qt source..."
         tar xf qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz
         cd qt-everywhere-src-${{ env.QT_VERSION }}
-        # Apply patches if necessary (e.g., for static build issues)
+        echo "Changed directory to $(pwd)"
+        # --- Check if configure exists ---
+        if [ ! -f ./configure ]; then
+          echo "ERROR: ./configure script not found in $(pwd)"
+          ls -lha # List directory contents for debugging
+          exit 1
+        fi
+        chmod +x ./configure # Ensure executable
+
+        echo "Running Qt configure..."
+        # --- Combine configure options onto fewer lines ---
         ./configure -static -prefix /opt/qt6-static -opensource -confirm-license \
-          -release -optimize-size \
-          -no-pch \
-          -platform linux-g++ \
-          -fontconfig \
-          -icu \
-          -no-feature-dbus \
-          -no-feature-glib \
-          -no-cups \
-          -no-feature-qdoc \ # <-- FIXED: Explicitly disable qdoc feature
-          -skip qt3d \
-          -skip qtactiveqt \
-          -skip qtcharts \
-          -skip qtcoap \
-          -skip qtconnectivity \
-          -skip qtdatavis3d \
-          # qtdeclarative is now built (dependency of qtwebengine)
-          -skip qtdoc \ # Skip the documentation module itself
-          -skip qtgraphs \
-          -skip qthttpserver \
-          -skip qtlocation \
-          -skip qtlottie \
-          -skip qtmqtt \
-          -skip qtmultimedia \
-          -skip qtnetworkauth \
-          -skip qtopcua \
-          -skip qtpositioning \
-          -skip qtquick3d \
-          -skip qtquicktimeline \
-          -skip qtremoteobjects \
-          -skip qtscxml \
-          -skip qtsensors \
-          -skip qtserialbus \
-          -skip qtserialport \
-          -skip qtspeech \
-          -skip qtsvg \
-          -skip qttools \ # Still skip building the tools module
-          -skip qttranslations \
-          -skip qtvirtualkeyboard \
-          -skip qtwayland \
-          -skip qtwebchannel \
-          -skip qtwebglplugin \
-          -skip qtwebsockets \
-          -skip qtwebview
-          # Purposefully NOT skipping: qtbase, qtdeclarative, qtwebengine
+            -release -optimize-size -no-pch -platform linux-g++ \
+            -fontconfig -icu -no-feature-dbus -no-feature-glib -no-cups -no-feature-qdoc \
+            -skip qt3d -skip qtactiveqt -skip qtcharts -skip qtcoap -skip qtconnectivity \
+            -skip qtdatavis3d -skip qtdoc -skip qtgraphs -skip qthttpserver \
+            -skip qtlocation -skip qtlottie -skip qtmqtt -skip qtmultimedia \
+            -skip qtnetworkauth -skip qtopcua -skip qtpositioning -skip qtquick3d \
+            -skip qtquicktimeline -skip qtremoteobjects -skip qtscxml -skip qtsensors \
+            -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtsvg -skip qttools \
+            -skip qttranslations -skip qtvirtualkeyboard -skip qtwayland -skip qtwebchannel \
+            -skip qtwebglplugin -skip qtwebsockets -skip qtwebview
+
+        # --- Check configure exit status ---
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Qt configure failed."
+          [ -f config.log ] && echo "--- Last 50 lines of config.log ---" && tail -n 50 config.log || echo "config.log not found."
+          exit 1
+        fi
+
+        echo "Building selected Qt modules..."
         # Build essential modules + qtdeclarative
         cmake --build . --parallel $(nproc) --target corelib gui widgets network declarative
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Qt build failed."
+          exit 1
+        fi
+
+        echo "Installing Qt..."
         sudo cmake --install . --prefix /opt/qt6-static
+        if [ $? -ne 0 ]; then
+          echo "ERROR: Qt install failed."
+          exit 1
+        fi
 
     # --- Build Static QtWebEngine ---
     - name: Build static QtWebEngine (using custom FFmpeg)
