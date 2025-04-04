@@ -21,6 +21,7 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt-get update
+        # Add -x temporarily for debugging if needed: # set -x
         sudo apt-get install -y --no-install-recommends \
           build-essential \
           cmake \
@@ -86,7 +87,9 @@ jobs:
           # Network Dependencies
           libnss3-dev \
           # PyQt Build
-          python3-pyqt6.sip
+          python3-pyqt6.sip \
+        # Cleanup (optional, remove after debugging if needed)
+        # set +x
 
     - name: Set Environment Variables
       run: |
@@ -164,8 +167,8 @@ jobs:
           -icu \
           # Include necessary multimedia/graphics backends if possible
           # -qt-libpng -qt-libjpeg -qt-freetype -qt-harfbuzz are default/enabled when found
-          -no-feature-dbus # Keep disabled for size unless needed
-          -no-feature-glib # Keep disabled for size unless needed
+          -no-feature-dbus \
+          -no-feature-glib \
           -no-cups \
           -skip qt3d \
           -skip qtactiveqt \
@@ -173,7 +176,7 @@ jobs:
           -skip qtcoap \
           -skip qtconnectivity \
           -skip qtdatavis3d \
-          -skip qtdeclarative \ # Might be needed by qutebrowser UI? Check qute's deps. Re-enable if needed. Let's keep it SKIP for now. Re-add if build fails.
+          -skip qtdeclarative \ # Re-add if Qutebrowser build fails needing QtQuick/QML
           -skip qtdoc \
           -skip qtgraphs \
           -skip qthttpserver \
@@ -237,13 +240,16 @@ jobs:
 
         # Build PyQt6 - this will take time
         # Pin versions carefully - check Qutebrowser compatibility. Use versions compatible with Qt ${QT_VERSION}
-        # Example versions (adjust as needed for compatibility with Qt ${QT_VERSION} and Qutebrowser ${QUTEBROWSER_VERSION}):
-        # python3 -m pip install --no-cache-dir --verbose --no-binary :all: PyQt6==6.6.0 PyQt6-sip==13.6.0 PyQt6-WebEngine==6.6.0
-        # For now, let's try installing without strict pinning to see if pip can resolve compatible versions
+        # Let's try installing without strict pinning first to see if pip can resolve compatible versions
+        # If this fails, try pinning e.g.: PyQt6==6.6.0 PyQt6-sip==13.6.0 PyQt6-WebEngine==6.6.0
+        echo "Attempting to build PyQt6 and PyQt6-WebEngine from source..."
         python3 -m pip install --no-cache-dir --verbose --no-binary :all: PyQt6 PyQt6-sip PyQt6-WebEngine
 
-        # Verify installation (optional)
-        python3 -c "from PyQt6 import QtCore; from PyQt6 import QtWebEngineCore; print('PyQt6 & WebEngine Import OK')"
+        # Verify installation (optional but recommended)
+        echo "Verifying PyQt6 installation..."
+        python3 -c "from PyQt6 import QtCore; from PyQt6.QtCore import QT_VERSION_STR; print(f'PyQt6 QtCore OK, Qt Version: {QT_VERSION_STR}')"
+        python3 -c "from PyQt6 import QtWebEngineCore; print('PyQt6 QtWebEngineCore OK')"
+        python3 -c "from PyQt6 import QtWebEngineWidgets; print('PyQt6 QtWebEngineWidgets OK')"
 
 
     # --- Prepare and Package Qutebrowser ---
@@ -253,17 +259,19 @@ jobs:
         git clone --depth 1 --branch ${{ env.QUTEBROWSER_VERSION }} https://github.com/qutebrowser/qutebrowser.git
         cd qutebrowser
         # Install Qutebrowser runtime dependencies (excluding PyQt which we built)
-        # Filter out PyQt lines from requirements.txt or list explicitly
-        python3 -m pip install --no-cache-dir -r requirements/requirements.txt --ignore-installed # Ignore system packages
+        echo "Installing qutebrowser dependencies..."
+        # Create a temporary requirements file without PyQt lines
+        grep -vE '^PyQt6|^PyQt6-WebEngine|^PyQt6-sip' requirements/requirements.txt > requirements-no-pyqt.txt
+        python3 -m pip install --no-cache-dir -r requirements-no-pyqt.txt --ignore-installed # Ignore system packages
+        rm requirements-no-pyqt.txt
 
     - name: Package Qutebrowser with PyInstaller
       run: |
         cd qutebrowser
+        echo "Running PyInstaller..."
         # PyInstaller might need help finding resources and static plugins
-        # Note: Bundling static Qt plugins (.a files) is complex. PyInstaller usually works with .so files.
-        # We might need to copy essential dynamic plugins from a STANDARD Qt build or see if PyInstaller works with static paths.
-        # Let's try adding the plugin path and see.
-        # Add common hidden imports qutebrowser might need
+        # The paths added via --add-data must exist in the build container at this point
+        # Destination paths (after ':') are relative to the PyInstaller bundle root
         pyinstaller --noconfirm --log-level=INFO \
           --name qutebrowser \
           --onefile \
@@ -285,8 +293,11 @@ jobs:
           --hidden-import="qutebrowser.utils.debug" \
           --hidden-import="PyQt6.sip" \
           --hidden-import="PyQt6.QtWebEngineWidgets" \
-          --hidden-import="PyQt6.QtQuick" # Add others based on runtime errors
+          --hidden-import="PyQt6.QtQuick" \
+          --hidden-import="PyQt6.QtOpenGLWidgets" # Often needed with WebEngine
           qutebrowser/__main__.py
+        echo "PyInstaller finished."
+        ls -l dist/ # Check output
         cd ..
 
     - name: Create run script
@@ -318,35 +329,48 @@ jobs:
           echo "Setting up X11 forwarding for DISPLAY=$DISPLAY"
           QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY")
           # Ensure X11 socket directory exists and add volume mount for QEMU
-          X11_SOCKET="/tmp/.X11-unix"
-          if [ -d "$X11_SOCKET" ]; then
-             QEMU_ARGS+=("-v" "$X11_SOCKET:$X11_SOCKET")
+          X11_SOCKET_DIR=$(dirname "${DISPLAY}")
+          if [[ "$DISPLAY" == /* ]]; then # Absolute path socket (e.g. /tmp/.X11-unix/X0)
+             X11_SOCKET_PATH="$DISPLAY"
+             X11_SOCKET_DIR=$(dirname "$X11_SOCKET_PATH")
+             DISPLAY_NUM=$(basename "$X11_SOCKET_PATH")
+             # QEMU needs the DISPLAY env var set to the host:port format, not the socket path
+             # Attempt to get host:port from `xauth list $DISPLAY` or make a guess
+             DISPLAY_HOST_PORT=$(echo "$DISPLAY" | sed -n 's/^\([^:]*\):\([0-9]\+\).*/\1:\2/p')
+             if [ -z "$DISPLAY_HOST_PORT" ]; then
+                 # Fallback guess if socket path was given
+                 DISPLAY_HOST_PORT="unix:$(echo "$DISPLAY" | sed -n 's/.*X\([0-9]\+\)/\1/p')"
+                 echo "Warning: DISPLAY uses socket path. Guessing DISPLAY as $DISPLAY_HOST_PORT for QEMU."
+             fi
+             QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY_HOST_PORT")
+
+          elif [[ "$DISPLAY" == unix:* ]]; then # unix: socket format
+            X11_SOCKET_DIR="/tmp/.X11-unix" # Standard location
+            DISPLAY_HOST_PORT="$DISPLAY"
+            QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY_HOST_PORT")
+
+          else # Standard :0, hostname:0 format
+            DISPLAY_HOST_PORT="$DISPLAY"
+            X11_SOCKET_DIR="/tmp/.X11-unix" # Standard location
+            QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY_HOST_PORT")
+          fi
+
+          # Mount the socket directory if it exists
+          if [ -d "$X11_SOCKET_DIR" ]; then
+             QEMU_ARGS+=("-v" "$X11_SOCKET_DIR:$X11_SOCKET_DIR")
           else
-             echo "Warning: X11 socket directory $X11_SOCKET not found."
+             echo "Warning: X11 socket directory '$X11_SOCKET_DIR' not found."
           fi
 
           # Handle Xauthority
-          if [ -n "$XAUTHORITY" ]; then
-            if [ -f "$XAUTHORITY" ]; then
-              QEMU_ARGS+=("-E" "XAUTHORITY=$XAUTHORITY")
-              # QEMU needs access to the file, map it if not directly accessible
-              # Heuristic: if it's not under /tmp or $HOME, map it explicitly
-              case "$XAUTHORITY" in
-                /tmp/*|"$HOME"/*) ;; # Assume accessible
-                *) QEMU_ARGS+=("-v" "$XAUTHORITY:$XAUTHORITY") ;;
-              esac
-            else
-              echo "Warning: XAUTHORITY file '$XAUTHORITY' not found."
-            fi
+          # Determine effective XAUTHORITY path
+          XAUTH_FILE="${XAUTHORITY:-$HOME/.Xauthority}"
+          if [ -f "$XAUTH_FILE" ]; then
+            echo "Using Xauthority file: $XAUTH_FILE"
+            QEMU_ARGS+=("-E" "XAUTHORITY=/tmp/guest.Xauthority") # Use a fixed path inside QEMU
+            QEMU_ARGS+=("-v" "$XAUTH_FILE:/tmp/guest.Xauthority:ro") # Map it read-only
           else
-              # Attempt to find default Xauthority
-              DEFAULT_XAUTH="$HOME/.Xauthority"
-              if [ -f "$DEFAULT_XAUTH" ]; then
-                  echo "Using default XAUTHORITY=$DEFAULT_XAUTH"
-                  QEMU_ARGS+=("-E" "XAUTHORITY=$DEFAULT_XAUTH")
-              else
-                  echo "Warning: No XAUTHORITY found. X11 forwarding might fail."
-              fi
+            echo "Warning: XAUTHORITY file '$XAUTH_FILE' not found. X11 authentication may fail."
           fi
         else
           echo "Error: DISPLAY environment variable is not set. Cannot run graphical application."
@@ -355,41 +379,54 @@ jobs:
 
         # Home Directory Access (QEMU inherits filesystem access, just pass env var)
         QEMU_ARGS+=("-E" "HOME=$HOME")
+        # Also pass USER and LOGNAME for completeness
+        QEMU_ARGS+=("-E" "USER=$USER")
+        QEMU_ARGS+=("-E" "LOGNAME=$LOGNAME")
 
         # Pass Qt specific environment variables that might be needed inside QEMU
-        # These paths should be relative to the chroot/emulated environment if changed
-        QEMU_ARGS+=("-E" "QT_PLUGIN_PATH=/qt6/plugins") # Path needs to match PyInstaller '--add-data' dest
+        # These paths are relative to the root *inside* the QEMU environment.
+        # PyInstaller unpacks to /tmp/_MEIxxxxxx, but env vars set here might influence Qt's search paths BEFORE PyInstaller overrides them.
+        # Let's use the paths defined in --add-data destination.
+        QEMU_ARGS+=("-E" "QT_PLUGIN_PATH=/qt6/plugins")
         QEMU_ARGS+=("-E" "QT_QPA_PLATFORM=xcb") # Explicitly set platform plugin
-        # Add path for QtWebEngineProcess if needed
-        # QEMU_ARGS+=("-E" "QTWEBENGINEPROCESS_PATH=/qt6/libexec/QtWebEngineProcess")
+        QEMU_ARGS+=("-E" "QTWEBENGINEPROCESS_PATH=/qt6/libexec/QtWebEngineProcess")
 
         # Fontconfig Cache (Important for static fontconfig)
-        # Allow qutebrowser to write font cache inside its runtime dir if possible
-        # or map a persistent cache location? For now, let it use default inside QEMU.
-        # QEMU_ARGS+=("-E" "XDG_CACHE_HOME=/path/inside/qemu/cache") # Example
+        # Make cache user-specific and writable within the user's home
+        # Inside QEMU, $HOME will be mapped to the host $HOME
+        QEMU_ARGS+=("-E" "XDG_CACHE_HOME=$HOME/.cache")
+        QEMU_ARGS+=("-E" "FONTCONFIG_PATH=/etc/fonts") # Standard host path might be needed by static fontconfig
 
         # Sound (Pulseaudio/Pipewire via socket)
         if [ -n "$XDG_RUNTIME_DIR" ]; then
           PULSE_SOCKET="$XDG_RUNTIME_DIR/pulse/native"
           PIPEWIRE_SOCKET="$XDG_RUNTIME_DIR/pipewire-0"
           if [ -S "$PULSE_SOCKET" ]; then
-              echo "Setting up PulseAudio forwarding"
+              echo "Setting up PulseAudio forwarding via $PULSE_SOCKET"
               QEMU_ARGS+=("-E" "PULSE_SERVER=unix:$PULSE_SOCKET")
               QEMU_ARGS+=("-v" "$PULSE_SOCKET:$PULSE_SOCKET")
           elif [ -S "$PIPEWIRE_SOCKET" ]; then
-              echo "Setting up PipeWire forwarding (experimental)"
-              # PipeWire might need more env vars or setup
-              QEMU_ARGS+=("-v" "$XDG_RUNTIME_DIR:$XDG_RUNTIME_DIR") # Broad access for PipeWire?
+              echo "Setting up PipeWire forwarding via $PIPEWIRE_SOCKET (experimental)"
+              # PipeWire might need more env vars or specific setup
+              QEMU_ARGS+=("-v" "$XDG_RUNTIME_DIR:$XDG_RUNTIME_DIR") # Broad access might be needed
           fi
+        else
+          echo "Warning: XDG_RUNTIME_DIR not set, cannot forward PulseAudio/PipeWire sockets."
         fi
-        # Fallback ALSA access (might require mapping /dev/snd)
+        # Fallback ALSA access (requires device access)
         # if [ -d /dev/snd ]; then
+        #   echo "Mapping ALSA devices /dev/snd"
         #   QEMU_ARGS+=("-v" "/dev/snd:/dev/snd")
         # fi
 
+        # Locale settings from host
+        QEMU_ARGS+=("-E" "LANG=${LANG:-C.UTF-8}")
+        QEMU_ARGS+=("-E" "LC_ALL=${LC_ALL}")
+        QEMU_ARGS+=("-E" "LANGUAGE=${LANGUAGE}")
 
         echo "Starting Qutebrowser via QEMU..."
         # The QEMU command requires the host path to the target binary
+        # Pass remaining arguments "$@" to qutebrowser
         "$QEMU_BIN" "${QEMU_ARGS[@]}" "$QUTEBROWSER_APP" "$@"
 
         EOF
