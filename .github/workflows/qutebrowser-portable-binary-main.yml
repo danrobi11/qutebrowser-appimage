@@ -149,51 +149,62 @@ jobs:
     # --- Phase 2: Build Static QtWebEngine ---
     - name: Build static QtWebEngine (using custom FFmpeg)
       env:
+        # LDFLAGS/CPPFLAGS might still be useful for CMake finding FFmpeg? Keep them.
         LDFLAGS: "-L/opt/ffmpeg-static/lib -L/opt/qt6-static/lib"
         CPPFLAGS: "-I/opt/ffmpeg-static/include -I/opt/qt6-static/include"
       run: |
         bash -ec '
         set -e
-        echo "Configuring QtWebEngine (Phase 2)..."
-        if [ ! -f /opt/qt6-static/bin/qt-configure-module ]; then
-            echo "ERROR: /opt/qt6-static/bin/qt-configure-module not found after Phase 1 install."
-            sudo find /opt/qt6-static -name qt-configure-module
-            exit 1
-        fi
+        echo "Configuring QtWebEngine (Phase 2) using direct CMake..."
 
+        # Go to the webengine source directory
         cd qt-everywhere-src-${{ env.QT_VERSION }}/qtwebengine
 
+        # Create a build directory (recommended practice)
+        mkdir -p build # Ensure build dir exists
+        cd build
+
         echo "Cleaning previous CMake cache (if any)..."
+        # Remove cache from parent dir if qt-configure-module left one, and current
+        rm -f ../CMakeCache.txt || true
         rm -f CMakeCache.txt || true
 
-        echo "Running qt-configure-module for WebEngine using -D flags..."
-        # --- FIXED: Pass features as CMake -D variables ---
+        echo "Running CMake for WebEngine..."
+        # --- FIXED: Use direct cmake with CMAKE_PREFIX_PATH ---
         set -x
-        /opt/qt6-static/bin/qt-configure-module . \
+        # Point to the static Qt install and pass features as -D defines
+        cmake .. \
+          -GNinja \
+          -DCMAKE_INSTALL_PREFIX=/opt/qt6-static \
+          -DCMAKE_PREFIX_PATH=/opt/qt6-static \
+          -DQT_BUILD_TOOLS_WHEN_CROSSCOMPILING=ON \
+          -DCMAKE_BUILD_TYPE=Release \
           -DQT_FEATURE_webengine_system_ffmpeg=ON \
           -DQT_FEATURE_webengine_proprietary_codecs=ON \
-          -DQT_FEATURE_webengine_pulse_audio=OFF
+          -DQT_FEATURE_webengine_pulse_audio=OFF \
+          -DQt6WebEngineCore_INSTALL_VERSIONLESS_USE_GENERATOR_FILE=OFF # Often needed for static builds
+          # Add any other CMake flags if required, e.g., -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
         _configure_exit_code=$?
         set +x
 
         if [ $_configure_exit_code -ne 0 ]; then
-          echo "ERROR: QtWebEngine configure (Phase 2) failed with exit code $_configure_exit_code."
-          echo "--- Last 50 lines of ./config.log (if exists) ---"
-          tail -n 50 ./config.log || true
-          echo "--- Finding CMake log files ---"
-          find . -name "CMakeOutput.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
-          find . -name "CMakeError.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
+          echo "ERROR: QtWebEngine CMake configure (Phase 2) failed with exit code $_configure_exit_code."
+          echo "--- Last 50 lines of ./CMakeOutput.log (if exists) ---"
+          tail -n 50 ./CMakeOutput.log || true
+          echo "--- Last 50 lines of ./CMakeError.log (if exists) ---"
+          tail -n 50 ./CMakeError.log || true
           exit 1
         fi
 
         echo "Building QtWebEngine (Phase 2)..."
-        cmake --build . --parallel 2 # Reduced parallelism
+        cmake --build . --parallel 2
         if [ $? -ne 0 ]; then echo "ERROR: QtWebEngine build (Phase 2) failed."; exit 1; fi
 
         echo "Installing QtWebEngine (Phase 2)..."
-        sudo cmake --install . --prefix /opt/qt6-static
+        # Install uses the CMAKE_INSTALL_PREFIX set during configure
+        sudo cmake --install .
         if [ $? -ne 0 ]; then echo "ERROR: QtWebEngine install (Phase 2) failed."; exit 1; fi
-        cd ../..
+        cd ../../.. # Go back to the main build directory from qtwebengine/build
 
         ' # End of bash block
 
