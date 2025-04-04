@@ -135,6 +135,7 @@ jobs:
 
         echo "Running Qt configure..."
         # --- Combine configure options onto fewer lines ---
+        # --- FIXED: Added -skip qtquick3dphysics ---
         ./configure -static -prefix /opt/qt6-static -opensource -confirm-license \
             -release -optimize-size -no-pch -platform linux-g++ \
             -fontconfig -icu -no-feature-dbus -no-feature-glib -no-cups -no-feature-qdoc \
@@ -145,7 +146,7 @@ jobs:
             -skip qtquicktimeline -skip qtremoteobjects -skip qtscxml -skip qtsensors \
             -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtsvg -skip qttools \
             -skip qttranslations -skip qtvirtualkeyboard -skip qtwayland -skip qtwebchannel \
-            -skip qtwebglplugin -skip qtwebsockets -skip qtwebview
+            -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtquick3dphysics
 
         # --- Check configure exit status ---
         if [ $? -ne 0 ]; then
