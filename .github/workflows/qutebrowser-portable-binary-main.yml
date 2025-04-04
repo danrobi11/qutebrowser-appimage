@@ -24,7 +24,7 @@ jobs:
         # Combine package list onto fewer lines to avoid backslash issues
         sudo apt-get install -y --no-install-recommends \
           build-essential cmake git wget xz-utils ca-certificates \
-          python3-dev python3-pip python3-venv \
+          python3-dev python3-pip python3-venv python3-html5lib \
           qemu-user-static \
           ninja-build gperf pkg-config patchelf \
           libx11-dev libxkbcommon-x11-dev libxkbcommon-dev libxcb1-dev libxcb-util-dev \
@@ -101,8 +101,8 @@ jobs:
         cd ..
         # rm -rf ffmpeg # Keep source for potential debugging if needed later
 
-    # --- Build Static Qt6 Core ---
-    - name: Download and build static Qt6 core
+    # --- Phase 1: Build Static Qt Base/Core (Skipping WebEngine) ---
+    - name: Download and build static Qt base/core
       run: |
         # Extract major.minor version (e.g., 6.6 from 6.6.3)
         QT_MAJOR_MINOR="${QT_VERSION%.*}"
@@ -125,20 +125,19 @@ jobs:
         tar xf qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz
         cd qt-everywhere-src-${{ env.QT_VERSION }}
         echo "Changed directory to $(pwd)"
-        # --- Check if configure exists ---
         if [ ! -f ./configure ]; then
           echo "ERROR: ./configure script not found in $(pwd)"
-          ls -lha # List directory contents for debugging
+          ls -lha
           exit 1
         fi
-        chmod +x ./configure # Ensure executable
+        chmod +x ./configure
 
-        echo "Running Qt configure..."
-        # --- Combine configure options onto fewer lines ---
-        # --- FIXED: Added -skip qtquick3dphysics ---
+        echo "Running Qt configure (Phase 1: Base)..."
+        # Configure base Qt, explicitly skipping WebEngine for now
         ./configure -static -prefix /opt/qt6-static -opensource -confirm-license \
             -release -optimize-size -no-pch -platform linux-g++ \
             -fontconfig -icu -no-feature-dbus -no-feature-glib -no-cups -no-feature-qdoc \
+            -skip qtwebengine \ # <-- Explicitly skip here
             -skip qt3d -skip qtactiveqt -skip qtcharts -skip qtcoap -skip qtconnectivity \
             -skip qtdatavis3d -skip qtdoc -skip qtgraphs -skip qthttpserver \
             -skip qtlocation -skip qtlottie -skip qtmqtt -skip qtmultimedia \
@@ -146,47 +145,79 @@ jobs:
             -skip qtquicktimeline -skip qtremoteobjects -skip qtscxml -skip qtsensors \
             -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtsvg -skip qttools \
             -skip qttranslations -skip qtvirtualkeyboard -skip qtwayland -skip qtwebchannel \
-            -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtquick3dphysics
+            -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtquick3dphysics \
+            -skip qtpdf # Skip PDF as well since it warned about html5lib
 
-        # --- Check configure exit status ---
         if [ $? -ne 0 ]; then
-          echo "ERROR: Qt configure failed."
+          echo "ERROR: Qt configure (Phase 1) failed."
           [ -f config.log ] && echo "--- Last 50 lines of config.log ---" && tail -n 50 config.log || echo "config.log not found."
           exit 1
         fi
+        # Print configure summary
+        cat config.summary || true
 
-        echo "Building selected Qt modules..."
-        # Build essential modules + qtdeclarative
-        cmake --build . --parallel $(nproc) --target corelib gui widgets network declarative
+        echo "Building configured Qt modules (Phase 1)..."
+        # Build whatever was successfully configured (should be base + declarative etc.)
+        cmake --build . --parallel $(nproc)
         if [ $? -ne 0 ]; then
-          echo "ERROR: Qt build failed."
+          echo "ERROR: Qt build (Phase 1) failed."
+          # Potentially add more debug log viewing here if needed
           exit 1
         fi
 
-        echo "Installing Qt..."
+        echo "Installing Qt (Phase 1)..."
         sudo cmake --install . --prefix /opt/qt6-static
         if [ $? -ne 0 ]; then
-          echo "ERROR: Qt install failed."
+          echo "ERROR: Qt install (Phase 1) failed."
           exit 1
         fi
+        echo "Qt Base Install directory listing:"
+        sudo ls -lha /opt/qt6-static/bin || true # Verify install
 
-    # --- Build Static QtWebEngine ---
+    # --- Phase 2: Build Static QtWebEngine ---
     - name: Build static QtWebEngine (using custom FFmpeg)
       env:
         # Ensure compiler/linker flags point to static libs if needed
         LDFLAGS: "-L/opt/ffmpeg-static/lib -L/opt/qt6-static/lib"
         CPPFLAGS: "-I/opt/ffmpeg-static/include -I/opt/qt6-static/include"
       run: |
+        echo "Configuring QtWebEngine (Phase 2)..."
+        # Check if qt-configure-module exists
+        if [ ! -f /opt/qt6-static/bin/qt-configure-module ]; then
+            echo "ERROR: /opt/qt6-static/bin/qt-configure-module not found after Phase 1 install."
+            sudo find /opt/qt6-static -name qt-configure-module
+            exit 1
+        fi
+
         cd qt-everywhere-src-${{ env.QT_VERSION }}/qtwebengine
-        # Configure QtWebEngine module using the installed static Qt
+        # Configure QtWebEngine module using the installed static Qt base
         /opt/qt6-static/bin/qt-configure-module . \
           -webengine-ffmpeg=system \
           -feature-webengine-proprietary-codecs \
           -no-feature-webengine-pulse-audio
-        # Build and install QtWebEngine
+
+        if [ $? -ne 0 ]; then
+          echo "ERROR: QtWebEngine configure (Phase 2) failed."
+          # Look for CMake logs within the qtwebengine directory
+          find . -name "CMakeOutput.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \;
+          find . -name "CMakeError.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \;
+          exit 1
+        fi
+
+        echo "Building QtWebEngine (Phase 2)..."
         cmake --build . --parallel $(nproc)
+        if [ $? -ne 0 ]; then
+          echo "ERROR: QtWebEngine build (Phase 2) failed."
+          exit 1
+        fi
+
+        echo "Installing QtWebEngine (Phase 2)..."
         sudo cmake --install . --prefix /opt/qt6-static
-        cd ../..
+        if [ $? -ne 0 ]; then
+          echo "ERROR: QtWebEngine install (Phase 2) failed."
+          exit 1
+        fi
+        cd ../.. # Go back to the main build directory
         # rm -rf qt-everywhere-src-${{ env.QT_VERSION }} # Keep source for potential debugging
 
     # --- Build PyQt6 against Static Qt ---
