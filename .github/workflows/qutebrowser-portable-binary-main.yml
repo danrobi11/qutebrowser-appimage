@@ -104,6 +104,9 @@ jobs:
     # --- Phase 1: Build Static Qt Base/Core (Skipping WebEngine) ---
     - name: Download and build static Qt base/core
       run: |
+        bash -ec ' # Force explicit bash execution, exit on error (-e), trace commands (-c would require argument, so do it manually later)
+        set -e # Exit on error
+
         # Extract major.minor version (e.g., 6.6 from 6.6.3)
         QT_MAJOR_MINOR="${QT_VERSION%.*}"
         QT_DOWNLOAD_URL="https://download.qt.io/archive/qt/${QT_MAJOR_MINOR}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz"
@@ -132,36 +135,80 @@ jobs:
         fi
         chmod +x ./configure
 
-        echo "Running Qt configure (Phase 1: Base)..."
-        # Configure base Qt, explicitly skipping WebEngine for now
-        ./configure -static -prefix /opt/qt6-static -opensource -confirm-license \
-            -release -optimize-size -no-pch -platform linux-g++ \
-            -fontconfig -icu -no-feature-dbus -no-feature-glib -no-cups -no-feature-qdoc \
-            -skip qtwebengine \ # <-- Explicitly skip here
-            -skip qt3d -skip qtactiveqt -skip qtcharts -skip qtcoap -skip qtconnectivity \
-            -skip qtdatavis3d -skip qtdoc -skip qtgraphs -skip qthttpserver \
-            -skip qtlocation -skip qtlottie -skip qtmqtt -skip qtmultimedia \
-            -skip qtnetworkauth -skip qtopcua -skip qtpositioning -skip qtquick3d \
-            -skip qtquicktimeline -skip qtremoteobjects -skip qtscxml -skip qtsensors \
-            -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtsvg -skip qttools \
-            -skip qttranslations -skip qtvirtualkeyboard -skip qtwayland -skip qtwebchannel \
-            -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtquick3dphysics \
-            -skip qtpdf # Skip PDF as well since it warned about html5lib
+        echo "First few lines of ./configure script:"
+        head -n 5 ./configure || echo "Could not read start of ./configure"
 
-        if [ $? -ne 0 ]; then
-          echo "ERROR: Qt configure (Phase 1) failed."
+        echo "Listing directory contents before configure:"
+        ls -la
+
+        echo "Running Qt configure (Phase 1: Base)..."
+        set -x # Enable command tracing
+        # Execute configure directly, pass args. Ensure no weird shell interpretation.
+        # Still use backslashes for readability here, should be ok within bash -ec ''
+        ./configure \
+            -static \
+            -prefix /opt/qt6-static \
+            -opensource -confirm-license \
+            -release -optimize-size \
+            -no-pch \
+            -platform linux-g++ \
+            -fontconfig \
+            -icu \
+            -no-feature-dbus \
+            -no-feature-glib \
+            -no-cups \
+            -no-feature-qdoc \
+            -skip qtwebengine \
+            -skip qt3d \
+            -skip qtactiveqt \
+            -skip qtcharts \
+            -skip qtcoap \
+            -skip qtconnectivity \
+            -skip qtdatavis3d \
+            -skip qtdoc \
+            -skip qtgraphs \
+            -skip qthttpserver \
+            -skip qtlocation \
+            -skip qtlottie \
+            -skip qtmqtt \
+            -skip qtmultimedia \
+            -skip qtnetworkauth \
+            -skip qtopcua \
+            -skip qtpositioning \
+            -skip qtquick3d \
+            -skip qtquicktimeline \
+            -skip qtremoteobjects \
+            -skip qtscxml \
+            -skip qtsensors \
+            -skip qtserialbus \
+            -skip qtserialport \
+            -skip qtspeech \
+            -skip qtsvg \
+            -skip qttools \
+            -skip qttranslations \
+            -skip qtvirtualkeyboard \
+            -skip qtwayland \
+            -skip qtwebchannel \
+            -skip qtwebglplugin \
+            -skip qtwebsockets \
+            -skip qtwebview \
+            -skip qtquick3dphysics \
+            -skip qtpdf
+
+        _configure_exit_code=$?
+        set +x # Disable tracing
+
+        if [ $_configure_exit_code -ne 0 ]; then
+          echo "ERROR: Qt configure (Phase 1) failed with exit code $_configure_exit_code."
           [ -f config.log ] && echo "--- Last 50 lines of config.log ---" && tail -n 50 config.log || echo "config.log not found."
           exit 1
         fi
-        # Print configure summary
         cat config.summary || true
 
         echo "Building configured Qt modules (Phase 1)..."
-        # Build whatever was successfully configured (should be base + declarative etc.)
         cmake --build . --parallel $(nproc)
         if [ $? -ne 0 ]; then
           echo "ERROR: Qt build (Phase 1) failed."
-          # Potentially add more debug log viewing here if needed
           exit 1
         fi
 
@@ -172,7 +219,9 @@ jobs:
           exit 1
         fi
         echo "Qt Base Install directory listing:"
-        sudo ls -lha /opt/qt6-static/bin || true # Verify install
+        sudo ls -lha /opt/qt6-static/bin || true
+
+        ' # End of bash -c block
 
     # --- Phase 2: Build Static QtWebEngine ---
     - name: Build static QtWebEngine (using custom FFmpeg)
@@ -199,8 +248,8 @@ jobs:
         if [ $? -ne 0 ]; then
           echo "ERROR: QtWebEngine configure (Phase 2) failed."
           # Look for CMake logs within the qtwebengine directory
-          find . -name "CMakeOutput.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \;
-          find . -name "CMakeError.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \;
+          find . -name "CMakeOutput.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
+          find . -name "CMakeError.log" -exec echo "--- {} ---" \; -exec tail -n 50 {} \; || true
           exit 1
         fi
 
