@@ -26,11 +26,11 @@ jobs:
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
-        # Create systemd service for graphical target
-        sudo chroot chroot bash -c "echo -e '[Unit]\nDescription=Start Qutebrowser Automatically\nAfter=network.target\n\n[Service]\nType=simple\nUser=root\nExecStartPre=/bin/mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host\nExecStart=/usr/bin/startx /usr/bin/qutebrowser\nRestart=always\nEnvironment=DISPLAY=:0\n\n[Install]\nWantedBy=graphical.target' > /etc/systemd/system/qutebrowser.service"
-        sudo chroot chroot systemctl enable qutebrowser.service
-        # Set default target to graphical
-        sudo chroot chroot systemctl set-default graphical.target
+        # Set up auto-login and X start
+        sudo chroot chroot bash -c "echo 'exec startx' > /root/.bash_profile"
+        sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host' > /root/.xinitrc"
+        sudo chroot chroot bash -c "echo 'exec /usr/bin/qutebrowser' >> /root/.xinitrc"
+        sudo chroot chroot chmod +x /root/.xinitrc
 
     - name: Package VM Components
       run: |
@@ -82,7 +82,7 @@ jobs:
           -kernel "$KERNEL"
           -initrd "$INITRD"
           -drive "file=$FS,format=raw,if=virtio"
-          -append "root=/dev/vda console=ttyS0 rw"
+          -append "root=/dev/vda console=ttyS0 rw init=/bin/bash"  # Boot directly to bash
           -m 1G
           -cpu host
           -enable-kvm
