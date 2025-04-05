@@ -28,11 +28,11 @@ jobs:
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
         # Set up auto-login for root on tty1
         sudo mkdir -p chroot/etc/systemd/system/getty@tty1.service.d
-        sudo bash -c 'cat > chroot/etc/systemd/system/getty@tty1.service.d/override.conf << EOF
+        sudo bash -c "cat > chroot/etc/systemd/system/getty@tty1.service.d/override.conf << 'EOF'
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
-EOF'
+EOF"
         sudo chroot chroot systemctl enable getty@tty1.service
         # Set up X and Qutebrowser
         sudo chroot chroot bash -c "echo 'exec startx' > /root/.bash_profile"
@@ -101,7 +101,7 @@ EOF'
           -device virtio-vga
         )
 
-        echo "Starting Qutebrowser VM..."
+       A       echo "Starting Qutebrowser VM..."
         "$QEMU_BIN" "${QEMU_ARGS[@]}" &
 
         trap 'kill $(jobs -p)' EXIT
