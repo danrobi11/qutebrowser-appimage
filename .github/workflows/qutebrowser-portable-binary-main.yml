@@ -33,8 +33,15 @@ jobs:
       run: |
         sudo cp chroot/boot/vmlinuz-* kernel
         sudo cp chroot/boot/initrd.img-* initrd
-        sudo tar -C chroot -czf filesystem.tar.gz .
-        ls -lh kernel initrd filesystem.tar.gz
+        # Create a 2GB raw disk image and copy chroot into it
+        sudo dd if=/dev/zero of=filesystem.img bs=1M count=2048
+        sudo mkfs.ext4 -F filesystem.img
+        sudo mkdir /mnt/chroot
+        sudo mount -o loop filesystem.img /mnt/chroot
+        sudo cp -a chroot/* /mnt/chroot/
+        sudo umount /mnt/chroot
+        sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.img
+        ls -lh kernel initrd filesystem.img qutebrowser-vm.tar.gz
 
     - name: Create Simple Run Script
       run: |
@@ -55,41 +62,23 @@ jobs:
         SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
         KERNEL="$SCRIPT_DIR/kernel"
         INITRD="$SCRIPT_DIR/initrd"
-        FS="$SCRIPT_DIR/filesystem.tar.gz"
+        FS="$SCRIPT_DIR/filesystem.img"
 
         [ -f "$KERNEL" ] && [ -f "$INITRD" ] && [ -f "$FS" ] || {
-          echo "Error: Missing VM components (kernel, initrd, or filesystem)."
-          exit 1
-        }
-
-        # Use ~/tmp for extraction, skip /dev nodes
-        mkdir -p "$HOME/tmp"
-        TEMP_DIR=$(mktemp -d -p "$HOME/tmp")
-        echo "Extracting filesystem to $TEMP_DIR (needs ~1.5 GB free)..."
-        tar -xzf "$FS" -C "$TEMP_DIR" --exclude='./dev/*' || {
-          echo "Error: Failed to extract filesystem.tar.gz."
-          echo "Check free space in $HOME/tmp:"
-          df -h "$HOME/tmp"
+          echo "Error: Missing VM components (kernel, initrd, or filesystem.img)."
           exit 1
         }
 
         # Share host's entire home directory
         HOST_SHARE="$HOME"
         GUEST_MOUNT="/mnt/host"
-        mkdir -p "$TEMP_DIR/$GUEST_MOUNT"
         echo "Sharing your home directory ($HOST_SHARE) at $GUEST_MOUNT in Qutebrowser."
         echo "Open files with 'file://$GUEST_MOUNT/path/to/file' (e.g., 'file:///mnt/host/Documents/test.html')."
-
-        # Mount the share and start Qutebrowser
-        echo "#!/bin/bash
-        mount -t 9p -o trans=virtio,version=9p2000.L hostshare $GUEST_MOUNT
-        /usr/bin/startx /usr/bin/qutebrowser" > "$TEMP_DIR/root/.xinitrc"
-        chmod +x "$TEMP_DIR/root/.xinitrc"
 
         QEMU_ARGS=(
           -kernel "$KERNEL"
           -initrd "$INITRD"
-          -drive "file=$TEMP_DIR,format=raw"
+          -drive "file=$FS,format=raw"
           -append "root=/dev/sda console=ttyS0 rw"
           -m 1G
           -cpu host
@@ -117,14 +106,14 @@ jobs:
         echo "Starting Qutebrowser VM..."
         "$QEMU_BIN" "${QEMU_ARGS[@]}" &
 
-        trap 'rm -rf "$TEMP_DIR"; kill $(jobs -p)' EXIT
+        trap 'kill $(jobs -p)' EXIT
         wait
         EOF
         chmod +x run-qutebrowser-vm.sh
 
     - name: Bundle Package
       run: |
-        sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.tar.gz run-qutebrowser-vm.sh
+        sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.img run-qutebrowser-vm.sh
         echo "--- Package Contents ---"
         sudo tar -tvf qutebrowser-vm.tar.gz
         echo "------------------------"
