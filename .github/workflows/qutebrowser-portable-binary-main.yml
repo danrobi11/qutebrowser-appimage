@@ -214,10 +214,10 @@ jobs:
         qmake -v
 
         echo "Attempting to build PyQt6 and PyQt6-WebEngine from source..."
-        # --- FIXED: Added --confirm-license=yes config setting ---
+        # --- FIXED: Changed --confirm-license=yes to just --confirm-license ---
         python3 -m pip install --no-cache-dir --verbose --no-binary :all: \
           --config-settings="--qmake=/opt/qt6-static/bin/qmake" \
-          --config-settings="--confirm-license=yes" \
+          --config-settings="--confirm-license" \
           PyQt6 PyQt6-sip PyQt6-WebEngine
 
         echo "Verifying PyQt6 installation..."
