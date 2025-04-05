@@ -1,9 +1,7 @@
-name: Build Static Qutebrowser with QEMU (Qt6)
+name: Build Portable Qutebrowser VM
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
     branches: [ main ]
   workflow_dispatch:
 
@@ -12,346 +10,136 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-
-    - name: Increase File Descriptor Limit
-      run: sudo sysctl -w fs.file-max=100000 && ulimit -n 4096
-
-    - name: Install build dependencies
+    - name: Install Tools
       run: |
         sudo apt-get update
-        # Added libcups2-dev and libdbus-1-dev
-        sudo apt-get install -y --no-install-recommends \
-          build-essential cmake git wget xz-utils ca-certificates \
-          python3-dev python3-pip python3-venv python3-html5lib \
-          qemu-user-static \
-          ninja-build gperf pkg-config patchelf \
-          libx11-dev libxkbcommon-x11-dev libxkbcommon-dev libxcb1-dev libxcb-util-dev \
-          libxcb-keysyms1-dev libxcb-icccm4-dev libxcb-randr0-dev libxcb-xkb-dev \
-          libxcb-xinerama0-dev libxcb-shape0-dev libxcb-sync-dev libxcb-render-util0-dev \
-          libxcb-image0-dev libdrm-dev libxcomposite-dev libxtst-dev libxdamage-dev \
-          libxrandr-dev libx11-xcb-dev libgl1-mesa-dev libegl1-mesa-dev libegl-dev \
-          libglvnd-dev \
-          libicu-dev libfontconfig1-dev libfreetype6-dev libssl-dev libzstd-dev \
-          libpng-dev libjpeg-dev libwebp-dev libharfbuzz-dev zlib1g-dev \
-          nasm yasm libx264-dev libvpx-dev \
-          libasound2-dev libpulse-dev \
-          libnss3-dev \
-          python3-pyqt6.sip \
-          libclang-15-dev \
-          libcups2-dev \
-          libdbus-1-dev
-        echo "Finished installing dependencies."
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils
 
-    - name: Set Environment Variables
+    - name: Create Minimal Ubuntu Chroot
       run: |
-        echo "QTDIR=/opt/qt6-static" >> $GITHUB_ENV
-        echo "PATH=/opt/qt6-static/bin:$PATH" >> $GITHUB_ENV
-        echo "PKG_CONFIG_PATH=/opt/ffmpeg-static/lib/pkgconfig:/opt/qt6-static/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
-        echo "LD_LIBRARY_PATH=/opt/ffmpeg-static/lib:/opt/qt6-static/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-        echo "QT_PLUGIN_PATH=/opt/qt6-static/plugins" >> $GITHUB_ENV
-        echo "QUTEBROWSER_VERSION=v3.2.0" >> $GITHUB_ENV
-        echo "QT_VERSION=6.6.3" >> $GITHUB_ENV
-        echo "FFMPEG_VERSION=n6.1.1" >> $GITHUB_ENV
+        sudo debootstrap --arch=amd64 jammy chroot http://archive.ubuntu.com/ubuntu/
+        sudo chroot chroot apt-get update
+        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xorg pulseaudio
+        sudo chroot chroot apt-get clean
+        sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
+        sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
+        sudo chroot chroot bash -c "echo '/usr/bin/startx /usr/bin/qutebrowser' > /root/.xinitrc"
+        sudo chmod +x chroot/root/.xinitrc
 
-    - name: Upgrade pip
+    - name: Package VM Components
       run: |
-        python3 -m pip install --no-cache-dir --upgrade pip>=23.0 wheel
+        sudo cp chroot/boot/vmlinuz-* kernel
+        sudo cp chroot/boot/initrd.img-* initrd
+        sudo tar -C chroot -czf filesystem.tar.gz .
+        ls -lh kernel initrd filesystem.tar.gz
 
-    # --- Build FFmpeg First ---
-    - name: Build static FFmpeg (with x264, vpx)
+    - name: Create Simple Run Script
       run: |
-        git clone --depth 1 --branch ${{ env.FFMPEG_VERSION }} https://git.ffmpeg.org/ffmpeg.git
-        cd ffmpeg
-        ./configure \
-          --prefix=/opt/ffmpeg-static \
-          --pkg-config-flags="--static" \
-          --extra-libs="-lpthread -lm -lz" \
-          --enable-static --disable-shared \
-          --disable-programs --disable-doc --disable-avdevice --disable-postproc \
-          --enable-gpl --enable-libx264 --enable-libvpx \
-          --enable-decoder=aac --enable-decoder=h264 --enable-decoder=vp8 --enable-decoder=vp9 \
-          --enable-decoder=theora --enable-decoder=opus --enable-decoder=vorbis \
-          --enable-demuxer=aac --enable-demuxer=flv --enable-demuxer=hls \
-          --enable-demuxer=matroska --enable-demuxer=mov --enable-demuxer=mp3 \
-          --enable-demuxer=ogg --enable-demuxer=wav \
-          --enable-protocol=file --enable-protocol=http --enable-protocol=https \
-          --enable-protocol=tcp --enable-protocol=tls --enable-protocol=udp
-        make -j$(nproc)
-        sudo make install
-        cd ..
-
-    # --- Phase 1: Build Static Qt Base/Core (Skipping WebEngine) ---
-    - name: Download and build static Qt base/core
-      run: |
-        bash -ec '
-        set -e
-
-        QT_MAJOR_MINOR="${QT_VERSION%.*}"
-        QT_DOWNLOAD_URL="https://download.qt.io/archive/qt/${QT_MAJOR_MINOR}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz"
-        echo "Downloading Qt from: ${QT_DOWNLOAD_URL}"
-        wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL}" || \
-          ( echo "Error: Failed to download Qt source from download.qt.io. Trying fallback..." && \
-            QT_DOWNLOAD_URL_FALLBACK="https://archive.qt.io/archive/qt/${QT_MAJOR_MINOR}/${{ env.QT_VERSION }}/single/qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz" && \
-            wget --tries=3 --timeout=60 "${QT_DOWNLOAD_URL_FALLBACK}" )
-        if [ $? -ne 0 ]; then echo "Error: All downloads failed. Aborting."; exit 1; fi
-
-        echo "Extracting Qt source..."
-        tar xf qt-everywhere-src-${{ env.QT_VERSION }}.tar.xz
-        cd qt-everywhere-src-${{ env.QT_VERSION }}
-        echo "Changed directory to $(pwd)"
-        if [ ! -f ./configure ]; then echo "ERROR: ./configure script not found in $(pwd)"; ls -lha; exit 1; fi
-        chmod +x ./configure
-
-        echo "Running Qt configure (Phase 1: Base)..."
-        ./configure \
-            -static \
-            -prefix /opt/qt6-static \
-            -opensource -confirm-license \
-            -release -optimize-size \
-            -no-pch \
-            -platform linux-g++ \
-            -fontconfig \
-            -icu \
-            -no-feature-dbus \
-            -no-feature-glib \
-            -no-cups \
-            -no-feature-qdoc \
-            -skip qtwebengine \
-            -skip qt3d -skip qtactiveqt -skip qtcharts -skip qtcoap -skip qtconnectivity \
-            -skip qtdatavis3d -skip qtdoc -skip qtgraphs -skip qthttpserver \
-            -skip qtlocation -skip qtlottie -skip qtmqtt -skip qtmultimedia \
-            -skip qtnetworkauth -skip qtopcua -skip qtpositioning -skip qtquick3d \
-            -skip qtquicktimeline -skip qtremoteobjects -skip qtscxml -skip qtsensors \
-            -skip qtserialbus -skip qtserialport -skip qtspeech -skip qtsvg -skip qttools \
-            -skip qttranslations -skip qtvirtualkeyboard -skip qtwayland -skip qtwebchannel \
-            -skip qtwebglplugin -skip qtwebsockets -skip qtwebview -skip qtquick3dphysics \
-            -skip qtpdf
-        _configure_exit_code=$?
-
-        if [ $_configure_exit_code -ne 0 ]; then
-          echo "ERROR: Qt configure (Phase 1) failed with exit code $_configure_exit_code."
-          [ -f config.log ] && echo "--- Last 50 lines of config.log ---" && tail -n 50 config.log || echo "config.log not found."
-          exit 1
-        fi
-        cat config.summary || true
-
-        echo "Building configured Qt modules (Phase 1)..."
-        cmake --build . --parallel 2 # Reduced parallelism
-        if [ $? -ne 0 ]; then echo "ERROR: Qt build (Phase 1) failed."; exit 1; fi
-
-        echo "Installing Qt (Phase 1)..."
-        sudo cmake --install . --prefix /opt/qt6-static
-        if [ $? -ne 0 ]; then echo "ERROR: Qt install (Phase 1) failed."; exit 1; fi
-        echo "Qt Base Install directory listing:"
-        sudo ls -lha /opt/qt6-static/bin || true
-
-        ' # End of bash -c block
-
-    # --- Phase 2: Build Static QtWebEngine ---
-    - name: Build static QtWebEngine (using custom FFmpeg)
-      env:
-        LDFLAGS: "-L/opt/ffmpeg-static/lib -L/opt/qt6-static/lib"
-        CPPFLAGS: "-I/opt/ffmpeg-static/include -I/opt/qt6-static/include"
-      run: |
-        bash -ec '
-        set -e
-        echo "Configuring QtWebEngine (Phase 2) using direct CMake..."
-
-        cd qt-everywhere-src-${{ env.QT_VERSION }}/qtwebengine
-        mkdir -p build
-        cd build
-
-        echo "Cleaning previous CMake cache (if any)..."
-        rm -f ../CMakeCache.txt || true
-        rm -f CMakeCache.txt || true
-
-        echo "Running CMake for WebEngine..."
-        set -x
-        cmake .. \
-          -GNinja \
-          -DCMAKE_INSTALL_PREFIX=/opt/qt6-static \
-          -DCMAKE_PREFIX_PATH=/opt/qt6-static \
-          -DQT_BUILD_TOOLS_WHEN_CROSSCOMPILING=ON \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DQT_FEATURE_webengine_system_ffmpeg=ON \
-          -DQT_FEATURE_webengine_proprietary_codecs=ON \
-          -DQT_FEATURE_webengine_pulse_audio=OFF \
-          -DQT_FEATURE_webengine_dbus=OFF \
-          -DQT_FEATURE_webengine_cups=OFF \
-          -DQt6WebEngineCore_INSTALL_VERSIONLESS_USE_GENERATOR_FILE=OFF
-        _configure_exit_code=$?
-        set +x
-
-        if [ $_configure_exit_code -ne 0 ]; then
-          echo "ERROR: QtWebEngine CMake configure (Phase 2) failed with exit code $_configure_exit_code."
-          echo "--- Last 50 lines of ./CMakeOutput.log (if exists) ---"
-          tail -n 50 ./CMakeOutput.log || true
-          echo "--- Last 50 lines of ./CMakeError.log (if exists) ---"
-          tail -n 50 ./CMakeError.log || true
-          exit 1
-        fi
-
-        echo "Building QtWebEngine (Phase 2)..."
-        cmake --build . --parallel 2
-        if [ $? -ne 0 ]; then echo "ERROR: QtWebEngine build (Phase 2) failed."; exit 1; fi
-
-        echo "Installing QtWebEngine (Phase 2)..."
-        sudo cmake --install .
-        if [ $? -ne 0 ]; then echo "ERROR: QtWebEngine install (Phase 2) failed."; exit 1; fi
-        cd ../../..
-
-        ' # End of bash block
-
-    # --- Build PyQt6 against Static Qt ---
-    - name: Build PyQt6 and PyQt6-WebEngine from source
-      env:
-        QT_SELECT: qt6
-      run: |
-        export PATH="/opt/qt6-static/bin:$PATH"
-        echo "Using qmake: $(which qmake)"
-        qmake -v
-
-        echo "Attempting to build PyQt6 and PyQt6-WebEngine from source..."
-        # --- FIXED: Changed --confirm-license=yes to just --confirm-license ---
-        python3 -m pip install --no-cache-dir --verbose --no-binary :all: \
-          --config-settings="--qmake=/opt/qt6-static/bin/qmake" \
-          --config-settings="--confirm-license" \
-          PyQt6 PyQt6-sip PyQt6-WebEngine
-
-        echo "Verifying PyQt6 installation..."
-        python3 -c "from PyQt6 import QtCore; from PyQt6.QtCore import QT_VERSION_STR; print(f'PyQt6 QtCore OK, Qt Version: {QT_VERSION_STR}')"
-        python3 -c "from PyQt6 import QtWebEngineCore; print('PyQt6 QtWebEngineCore OK')"
-        python3 -c "from PyQt6 import QtWebEngineWidgets; print('PyQt6 QtWebEngineWidgets OK')"
-
-    # --- Prepare and Package Qutebrowser ---
-    - name: Install PyInstaller and Clone Qutebrowser
-      run: |
-        python3 -m pip install --no-cache-dir pyinstaller==6.6.0
-        git clone --depth 1 --branch ${{ env.QUTEBROWSER_VERSION }} https://github.com/qutebrowser/qutebrowser.git
-        cd qutebrowser
-        echo "Installing qutebrowser dependencies..."
-        grep -vE '^PyQt6|^PyQt6-WebEngine|^PyQt6-sip' requirements/requirements.txt > requirements-no-pyqt.txt
-        python3 -m pip install --no-cache-dir -r requirements-no-pyqt.txt --ignore-installed
-        rm requirements-no-pyqt.txt
-
-    - name: Package Qutebrowser with PyInstaller
-      run: |
-        cd qutebrowser
-        echo "Running PyInstaller..."
-        pyinstaller --noconfirm --log-level=INFO \
-          --name qutebrowser \
-          --onefile \
-          --add-data "qutebrowser/html:qutebrowser/html" \
-          --add-data "qutebrowser/js:qutebrowser/js" \
-          --add-data "qutebrowser/misc:qutebrowser/misc" \
-          --add-data "qutebrowser/schemes:qutebrowser/schemes" \
-          --add-data "qutebrowser/icons:qutebrowser/icons" \
-          --add-data "qutebrowser/messages:qutebrowser/messages" \
-          --add-data "/opt/qt6-static/plugins/platforms:qt6/plugins/platforms" \
-          --add-data "/opt/qt6-static/plugins/imageformats:qt6/plugins/imageformats" \
-          --add-data "/opt/qt6-static/plugins/tls:qt6/plugins/tls" \
-          --add-data "/opt/qt6-static/plugins/xcbglintegrations:qt6/plugins/xcbglintegrations" \
-          --add-data "/opt/qt6-static/libexec:qt6/libexec" \
-          --hidden-import="pkg_resources.py2_warn" \
-          --hidden-import="pkg_resources.markers" \
-          --hidden-import="qutebrowser.app" \
-          --hidden-import="qutebrowser.browser.webengine" \
-          --hidden-import="qutebrowser.utils.debug" \
-          --hidden-import="PyQt6.sip" \
-          --hidden-import="PyQt6.QtWebEngineWidgets" \
-          --hidden-import="PyQt6.QtQuick" \
-          --hidden-import="PyQt6.QtOpenGLWidgets" \
-          qutebrowser/__main__.py
-        echo "PyInstaller finished."
-        ls -l dist/
-        cd ..
-
-    - name: Create run script
-      run: |
-        cat > run-qutebrowser.sh << 'EOF'
+        cat > run-qutebrowser-vm.sh << 'EOF'
         #!/bin/bash
         set -e
 
+        QEMU_BIN="qemu-system-x86_64"  # Assumes installed on host
+
+        # Check if QEMU is available
+        command -v "$QEMU_BIN" >/dev/null 2>&1 || {
+          echo "Error: $QEMU_BIN not found."
+          echo "Please install QEMU first (e.g., 'sudo apt install qemu-system-x86' on Ubuntu/Debian,"
+          echo "'sudo dnf install qemu-system-x86' on Fedora, or 'sudo pacman -S qemu' on Arch)."
+          exit 1
+        }
+
         SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
-        QUTEBROWSER_APP="$SCRIPT_DIR/qutebrowser"
-        QEMU_BIN="$SCRIPT_DIR/qemu-x86_64-static"
+        KERNEL="$SCRIPT_DIR/kernel"
+        INITRD="$SCRIPT_DIR/initrd"
+        FS="$SCRIPT_DIR/filesystem.tar.gz"
 
-        if [ ! -f "$QEMU_BIN" ]; then echo "Error: QEMU binary '$QEMU_BIN' not found."; exit 1; fi
-        if [ ! -f "$QUTEBROWSER_APP" ]; then echo "Error: Qutebrowser application '$QUTEBROWSER_APP' not found."; exit 1; fi
-        chmod +x "$QEMU_BIN" "$QUTEBROWSER_APP" 2>/dev/null
+        [ -f "$KERNEL" ] && [ -f "$INITRD" ] && [ -f "$FS" ] || {
+          echo "Error: Missing VM components (kernel, initrd, or filesystem)."
+          exit 1
+        }
 
-        QEMU_ARGS=()
+        TEMP_DIR=$(mktemp -d)
+        tar -xzf "$FS" -C "$TEMP_DIR"
+
+        # Share host's entire home directory
+        HOST_SHARE="$HOME"
+        GUEST_MOUNT="/mnt/host"
+        mkdir -p "$TEMP_DIR/$GUEST_MOUNT"
+        echo "Sharing your home directory ($HOST_SHARE) at $GUEST_MOUNT in Qutebrowser."
+        echo "Open files with 'file://$GUEST_MOUNT/path/to/file' (e.g., 'file:///mnt/host/Documents/test.html')."
+
+        # Mount the share and start Qutebrowser
+        echo "#!/bin/bash
+        mount -t 9p -o trans=virtio,version=9p2000.L hostshare $GUEST_MOUNT
+        /usr/bin/startx /usr/bin/qutebrowser" > "$TEMP_DIR/root/.xinitrc"
+        chmod +x "$TEMP_DIR/root/.xinitrc"
+
+        QEMU_ARGS=(
+          -kernel "$KERNEL"
+          -initrd "$INITRD"
+          -drive "file=$TEMP_DIR,format=raw"
+          -append "root=/dev/sda console=ttyS0 rw"
+          -m 1G
+          -cpu host
+          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough"
+        )
 
         if [ -n "$DISPLAY" ]; then
-          echo "Setting up X11 forwarding for DISPLAY=$DISPLAY"
-          QEMU_ARGS+=("-E" "DISPLAY=$DISPLAY")
-          X11_SOCKET_DIR="/tmp/.X11-unix"
-          if [[ "$DISPLAY" == /* ]]; then X11_SOCKET_DIR=$(dirname "$DISPLAY"); fi
-          if [ -d "$X11_SOCKET_DIR" ]; then QEMU_ARGS+=("-v" "$X11_SOCKET_DIR:$X11_SOCKET_DIR"); else echo "Warning: X11 socket directory '$X11_SOCKET_DIR' not found."; fi
-          XAUTH_FILE="${XAUTHORITY:-$HOME/.Xauthority}"
-          if [ -f "$XAUTH_FILE" ]; then
-            echo "Using Xauthority file: $XAUTH_FILE"
-            QEMU_ARGS+=("-E" "XAUTHORITY=/tmp/guest.Xauthority")
-            QEMU_ARGS+=("-v" "$XAUTH_FILE:/tmp/guest.Xauthority:ro")
-          else
-            echo "Warning: XAUTHORITY file '$XAUTH_FILE' not found."
-          fi
+          echo "Setting up display with SPICE (port 5900) for clipboard sharing."
+          echo "To enable clipboard: Install a SPICE client (e.g., 'sudo apt install spicy'), then run:"
+          echo "  spicy -h 127.0.0.1 -p 5900"
+          echo "Copy/paste will work between host and Qutebrowser."
+          QEMU_ARGS+=(
+            -display "sdl,gl=on"
+            -vga virtio
+            -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
+          )
         else
-          echo "Error: DISPLAY environment variable is not set."
-          exit 1
+          echo "Warning: DISPLAY not set, running headless (no GUI or clipboard)."
+          QEMU_ARGS+=(-nographic)
         fi
 
-        QEMU_ARGS+=("-E" "HOME=$HOME")
-        QEMU_ARGS+=("-E" "USER=$USER")
-        QEMU_ARGS+=("-E" "LOGNAME=$LOGNAME")
-        QEMU_ARGS+=("-E" "QT_PLUGIN_PATH=/qt6/plugins")
-        QEMU_ARGS+=("-E" "QT_QPA_PLATFORM=xcb")
-        QEMU_ARGS+=("-E" "QTWEBENGINEPROCESS_PATH=/qt6/libexec/QtWebEngineProcess")
-        QEMU_ARGS+=("-E" "XDG_CACHE_HOME=$HOME/.cache")
-        QEMU_ARGS+=("-E" "FONTCONFIG_PATH=/etc/fonts")
-
-        if [ -n "$XDG_RUNTIME_DIR" ]; then
+        # Sound: Try PulseAudio first, fall back to ALSA
+        if [ -n "$XDG_RUNTIME_DIR" ] && [ -S "$XDG_RUNTIME_DIR/pulse/native" ]; then
           PULSE_SOCKET="$XDG_RUNTIME_DIR/pulse/native"
-          PIPEWIRE_SOCKET="$XDG_RUNTIME_DIR/pipewire-0"
-          if [ -S "$PULSE_SOCKET" ]; then
-              echo "Setting up PulseAudio forwarding via $PULSE_SOCKET"
-              QEMU_ARGS+=("-E" "PULSE_SERVER=unix:$PULSE_SOCKET")
-              QEMU_ARGS+=("-v" "$PULSE_SOCKET:$PULSE_SOCKET")
-          elif [ -S "$PIPEWIRE_SOCKET" ]; then
-              echo "Setting up PipeWire forwarding via $PIPEWIRE_SOCKET (experimental)"
-              QEMU_ARGS+=("-v" "$XDG_RUNTIME_DIR:$XDG_RUNTIME_DIR")
-          fi
+          echo "Setting up PulseAudio via $PULSE_SOCKET"
+          QEMU_ARGS+=(
+            -device "intel-hda,id=sound0"
+            -device "hda-duplex,id=sound0-codec0"
+            -audiodev "pa,id=pa,server=unix:$PULSE_SOCKET"
+            -v "$PULSE_SOCKET:$PULSE_SOCKET"
+          )
+        elif [ -d "/dev/snd" ]; then
+          echo "PulseAudio not found, falling back to ALSA."
+          QEMU_ARGS+=(
+            -device "intel-hda,id=sound0"
+            -device "hda-duplex,id=sound0-codec0"
+            -audiodev "alsa,id=alsa,out.dev=hw:0,0"
+          )
         else
-          echo "Warning: XDG_RUNTIME_DIR not set, cannot forward PulseAudio/PipeWire sockets."
+          echo "Warning: No PulseAudio or ALSA detected, sound may not work."
         fi
 
-        QEMU_ARGS+=("-E" "LANG=${LANG:-C.UTF-8}")
-        QEMU_ARGS+=("-E" "LC_ALL=${LC_ALL}")
-        QEMU_ARGS+=("-E" "LANGUAGE=${LANGUAGE}")
+        echo "Starting Qutebrowser VM..."
+        "$QEMU_BIN" "${QEMU_ARGS[@]}" &
 
-        echo "Starting Qutebrowser via QEMU..."
-        "$QEMU_BIN" "${QEMU_ARGS[@]}" "$QUTEBROWSER_APP" "$@"
+        trap 'rm -rf "$TEMP_DIR"; kill $(jobs -p)' EXIT
+        wait
         EOF
-        chmod +x run-qutebrowser.sh
+        chmod +x run-qutebrowser-vm.sh
 
-    - name: Bundle package
+    - name: Bundle Package
       run: |
-        cp /usr/bin/qemu-x86_64-static .
-        mkdir qutebrowser-qemu-pkg
-        mv qutebrowser/dist/qutebrowser qutebrowser-qemu-pkg/
-        mv qemu-x86_64-static qutebrowser-qemu-pkg/
-        mv run-qutebrowser.sh qutebrowser-qemu-pkg/
-        tar -czf qutebrowser-qemu.tar.gz qutebrowser-qemu-pkg
+        tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.tar.gz run-qutebrowser-vm.sh
         echo "--- Package Contents ---"
-        tar -tvf qutebrowser-qemu.tar.gz
+        tar -tvf qutebrowser-vm.tar.gz
         echo "------------------------"
-        ls -lh qutebrowser-qemu.tar.gz
-        tar -ztvf qutebrowser-qemu.tar.gz | awk '{sum+=$3} END {printf "Estimated Uncompressed Size: %.2f MB\n", sum/1024/1024}'
+        ls -lh qutebrowser-vm.tar.gz
+        tar -ztvf qutebrowser-vm.tar.gz | awk '{sum+=$3} END {printf "Estimated Uncompressed Size: %.2f MB\n", sum/1024/1024}'
 
-    - name: Upload artifact
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: qutebrowser-qemu
-        path: qutebrowser-qemu.tar.gz
+        name: qutebrowser-vm
+        path: qutebrowser-vm.tar.gz
