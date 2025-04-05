@@ -26,11 +26,11 @@ jobs:
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
-        # Set up auto-login and X start
-        sudo chroot chroot bash -c "echo 'exec startx' > /root/.bash_profile"
-        sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host' > /root/.xinitrc"
-        sudo chroot chroot bash -c "echo 'exec /usr/bin/qutebrowser' >> /root/.xinitrc"
-        sudo chroot chroot chmod +x /root/.xinitrc
+        # Set up X and Qutebrowser
+        sudo chroot chroot bash -c "echo '/usr/lib/xorg/Xorg :0 & sleep 1; /usr/bin/qutebrowser' > /root/start_qutebrowser.sh"
+        sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host' >> /root/start_qutebrowser.sh"
+        sudo chroot chroot chmod +x /root/start_qutebrowser.sh
+        sudo chroot chroot bash -c "echo 'exec /root/start_qutebrowser.sh' > /root/.bash_profile"
 
     - name: Package VM Components
       run: |
@@ -82,7 +82,7 @@ jobs:
           -kernel "$KERNEL"
           -initrd "$INITRD"
           -drive "file=$FS,format=raw,if=virtio"
-          -append "root=/dev/vda console=ttyS0 rw init=/bin/bash"  # Boot directly to bash
+          -append "root=/dev/vda console=ttyS0 rw init=/bin/bash"
           -m 1G
           -cpu host
           -enable-kvm
