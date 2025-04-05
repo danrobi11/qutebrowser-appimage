@@ -22,21 +22,35 @@ jobs:
         sudo chroot chroot apt-get install -y software-properties-common
         sudo chroot chroot add-apt-repository universe
         sudo chroot chroot apt-get update
-        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xorg pulseaudio
+        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
-        sudo chroot chroot bash -c "echo '/usr/bin/startx /usr/bin/qutebrowser' > /root/.xinitrc"
-        sudo chmod +x chroot/root/.xinitrc
+        # Create systemd service to auto-start Qutebrowser
+        sudo chroot chroot bash -c "cat > /etc/systemd/system/qutebrowser.service << 'EOT'
+[Unit]
+Description=Start Qutebrowser Automatically
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStartPre=/bin/mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host
+ExecStart=/usr/bin/startx /usr/bin/qutebrowser
+Restart=always
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=multi-user.target
+EOT"
+        sudo chroot chroot systemctl enable qutebrowser.service
 
     - name: Package VM Components
       run: |
         sudo cp chroot/boot/vmlinuz-* kernel
         sudo cp chroot/boot/initrd.img-* initrd
-        # Check chroot size
         echo "Chroot size:"
         sudo du -sh chroot
-        # Create a 4GB raw disk image and copy chroot into it
         sudo dd if=/dev/zero of=filesystem.img bs=1M count=4096
         sudo mkfs.ext4 -F filesystem.img
         sudo mkdir /mnt/chroot
@@ -52,13 +66,11 @@ jobs:
         #!/bin/bash
         set -e
 
-        QEMU_BIN="qemu-system-x86_64"  # Assumes installed on host
+        QEMU_BIN="qemu-system-x86_64"
 
-        # Check if QEMU is available
         command -v "$QEMU_BIN" >/dev/null 2>&1 || {
           echo "Error: $QEMU_BIN not found."
-          echo "Please install QEMU first (e.g., 'sudo apt install qemu-system-x86' on Ubuntu/Debian,"
-          echo "'sudo dnf install qemu-system-x86' on Fedora, or 'sudo pacman -S qemu' on Arch)."
+          echo "Please install QEMU first (e.g., 'sudo xbps-install -S qemu' on Void)."
           exit 1
         }
 
@@ -72,39 +84,25 @@ jobs:
           exit 1
         }
 
-        # Share host's entire home directory
         HOST_SHARE="$HOME"
         GUEST_MOUNT="/mnt/host"
         echo "Sharing your home directory ($HOST_SHARE) at $GUEST_MOUNT in Qutebrowser."
         echo "Open files with 'file://$GUEST_MOUNT/path/to/file' (e.g., 'file:///mnt/host/Documents/test.html')."
+        echo "Connecting to SPICE display on port 5900..."
+        echo "Run: 'spicy -h 127.0.0.1 -p 5900' to see Qutebrowser (install with 'sudo xbps-install -S spice-gtk')."
 
         QEMU_ARGS=(
           -kernel "$KERNEL"
           -initrd "$INITRD"
-          -drive "file=$FS,format=raw"
-          -append "root=/dev/sda console=ttyS0 rw"
+          -drive "file=$FS,format=raw,if=virtio"
+          -append "root=/dev/vda console=ttyS0 rw"
           -m 1G
           -cpu host
+          -enable-kvm
           -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough"
+          -vga virtio
+          -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
         )
-
-        if [ -n "$DISPLAY" ]; then
-          echo "Setting up display with SPICE (port 5900) for clipboard sharing."
-          echo "To enable clipboard: Install a SPICE client (e.g., 'sudo apt install spicy'), then run:"
-          echo "  spicy -h 127.0.0.1 -p 5900"
-          echo "Copy/paste will work between host and Qutebrowser."
-          QEMU_ARGS+=(
-            -display "sdl,gl=on"
-            -vga virtio
-            -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
-          )
-        else
-          echo "Warning: DISPLAY not set, running headless (no GUI or clipboard)."
-          QEMU_ARGS+=(-nographic)
-        fi
-
-        # Sound: Disabled for initial launch test
-        echo "Sound setup skipped for now—will be added back once launch is confirmed."
 
         echo "Starting Qutebrowser VM..."
         "$QEMU_BIN" "${QEMU_ARGS[@]}" &
