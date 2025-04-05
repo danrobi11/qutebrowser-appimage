@@ -26,15 +26,11 @@ jobs:
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
-        # Set up auto-login for root on tty1
-        sudo mkdir -p chroot/etc/systemd/system/getty@tty1.service.d
-        echo -e "[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM" | sudo tee chroot/etc/systemd/system/getty@tty1.service.d/override.conf > /dev/null
-        sudo chroot chroot systemctl enable getty@tty1.service
-        # Set up X and Qutebrowser
-        sudo chroot chroot bash -c "echo 'exec startx' > /root/.bash_profile"
-        sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host' > /root/.xinitrc"
-        sudo chroot chroot bash -c "echo 'exec /usr/bin/qutebrowser' >> /root/.xinitrc"
-        sudo chroot chroot chmod +x /root/.xinitrc
+        # Create a startup script to launch X and Qutebrowser directly
+        sudo chroot chroot bash -c "echo '#!/bin/bash' > /start-qutebrowser.sh"
+        sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host' >> /start-qutebrowser.sh"
+        sudo chroot chroot bash -c "echo 'startx /usr/bin/qutebrowser' >> /start-qutebrowser.sh"
+        sudo chroot chroot chmod +x /start-qutebrowser.sh
 
     - name: Package VM Components
       run: |
@@ -58,10 +54,19 @@ jobs:
         set -e
 
         QEMU_BIN="qemu-system-x86_64"
+        SPICE_BIN="spicy"
 
+        # Check for QEMU
         command -v "$QEMU_BIN" >/dev/null 2>&1 || {
           echo "Error: $QEMU_BIN not found."
           echo "Please install QEMU first (e.g., 'sudo xbps-install -S qemu' on Void)."
+          exit 1
+        }
+
+        # Check for spicy
+        command -v "$SPICE_BIN" >/dev/null 2>&1 || {
+          echo "Error: $SPICE_BIN not found."
+          echo "Please install spice-gtk (e.g., 'sudo xbps-install -S spice-gtk' on Void)."
           exit 1
         }
 
@@ -79,14 +84,13 @@ jobs:
         GUEST_MOUNT="/mnt/host"
         echo "Sharing your home directory ($HOST_SHARE) at $GUEST_MOUNT in Qutebrowser."
         echo "Open files with 'file://$GUEST_MOUNT/path/to/file' (e.g., 'file:///mnt/host/Documents/test.html')."
-        echo "Connecting to SPICE display on port 5900..."
-        echo "Run: 'spicy -h 127.0.0.1 -p 5900' to see Qutebrowser (install with 'sudo xbps-install -S spice-gtk')."
+        echo "Starting Qutebrowser VM with SPICE display on port 5900..."
 
         QEMU_ARGS=(
           -kernel "$KERNEL"
           -initrd "$INITRD"
           -drive "file=$FS,format=raw,if=virtio"
-          -append "root=/dev/vda console=ttyS0 rw"
+          -append "root=/dev/vda console=ttyS0 rw init=/start-qutebrowser.sh"
           -m 1G
           -cpu host
           -enable-kvm
@@ -97,11 +101,22 @@ jobs:
           -device virtio-vga
         )
 
-        echo "Starting Qutebrowser VM..."
+        # Start QEMU in the background
         "$QEMU_BIN" "${QEMU_ARGS[@]}" &
+        QEMU_PID=$!
 
-        trap 'kill $(jobs -p)' EXIT
-        wait
+        # Give QEMU a moment to start the SPICE server
+        sleep 2
+
+        # Start spicy to connect to the SPICE display
+        "$SPICE_BIN" -h 127.0.0.1 -p 5900 &
+        SPICE_PID=$!
+
+        # Trap to clean up both processes on exit
+        trap 'kill $QEMU_PID $SPICE_PID 2>/dev/null' EXIT
+
+        # Wait for QEMU to finish
+        wait $QEMU_PID
         EOF
         chmod +x run-qutebrowser-vm.sh
 
