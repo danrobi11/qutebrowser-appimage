@@ -28,11 +28,7 @@ jobs:
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
         # Set up auto-login for root on tty1
         sudo mkdir -p chroot/etc/systemd/system/getty@tty1.service.d
-        sudo tee chroot/etc/systemd/system/getty@tty1.service.d/override.conf > /dev/null <<EOF
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM
-EOF
+        echo -e "[Service]\nExecStart=\nExecStart=-/sbin/agetty --autologin root --noclear %I \$TERM" | sudo tee chroot/etc/systemd/system/getty@tty1.service.d/override.conf > /dev/null
         sudo chroot chroot systemctl enable getty@tty1.service
         # Set up X and Qutebrowser
         sudo chroot chroot bash -c "echo 'exec startx' > /root/.bash_profile"
