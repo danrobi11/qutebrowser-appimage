@@ -111,26 +111,8 @@ jobs:
           QEMU_ARGS+=(-nographic)
         fi
 
-        # Sound: Try PulseAudio first, fall back to ALSA
-        if [ -n "$XDG_RUNTIME_DIR" ] && [ -S "$XDG_RUNTIME_DIR/pulse/native" ]; then
-          PULSE_SOCKET="$XDG_RUNTIME_DIR/pulse/native"
-          echo "Setting up PulseAudio via $PULSE_SOCKET"
-          QEMU_ARGS+=(
-            -device "intel-hda,id=sound0"
-            -device "hda-duplex,id=sound0-codec0"
-            -audiodev "pa,id=pa,server=unix:$PULSE_SOCKET"
-            -v "$PULSE_SOCKET:$PULSE_SOCKET"
-          )
-        elif [ -d "/dev/snd" ]; then
-          echo "PulseAudio not found, falling back to ALSA."
-          QEMU_ARGS+=(
-            -device "intel-hda,id=sound0"
-            -device "hda-duplex,id=sound0-codec0"
-            -audiodev "alsa,id=alsa,out.dev=hw:0,0"
-          )
-        else
-          echo "Warning: No PulseAudio or ALSA detected, sound may not work."
-        fi
+        # Sound: Disabled for initial launch test
+        echo "Sound setup skipped for now—will be added back once launch is confirmed."
 
         echo "Starting Qutebrowser VM..."
         "$QEMU_BIN" "${QEMU_ARGS[@]}" &
