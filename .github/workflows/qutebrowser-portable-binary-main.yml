@@ -135,9 +135,9 @@ jobs:
 
     - name: Bundle Package
       run: |
-        tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.tar.gz run-qutebrowser-vm.sh
+        sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.tar.gz run-qutebrowser-vm.sh
         echo "--- Package Contents ---"
-        tar -tvf qutebrowser-vm.tar.gz
+        sudo tar -tvf qutebrowser-vm.tar.gz
         echo "------------------------"
         ls -lh qutebrowser-vm.tar.gz
         tar -ztvf qutebrowser-vm.tar.gz | awk '{sum+=$3} END {printf "Estimated Uncompressed Size: %.2f MB\n", sum/1024/1024}'
