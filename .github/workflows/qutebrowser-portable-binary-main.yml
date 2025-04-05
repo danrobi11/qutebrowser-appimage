@@ -26,23 +26,8 @@ jobs:
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
-        # Create systemd service to auto-start Qutebrowser
-        sudo chroot chroot bash -c "cat > /etc/systemd/system/qutebrowser.service << 'EOT'
-[Unit]
-Description=Start Qutebrowser Automatically
-After=network.target
-
-[Service]
-Type=simple
-User=root
-ExecStartPre=/bin/mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host
-ExecStart=/usr/bin/startx /usr/bin/qutebrowser
-Restart=always
-Environment=DISPLAY=:0
-
-[Install]
-WantedBy=multi-user.target
-EOT"
+        # Create systemd service with escaped newlines
+        sudo chroot chroot bash -c "echo -e '[Unit]\nDescription=Start Qutebrowser Automatically\nAfter=network.target\n\n[Service]\nType=simple\nUser=root\nExecStartPre=/bin/mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host\nExecStart=/usr/bin/startx /usr/bin/qutebrowser\nRestart=always\nEnvironment=DISPLAY=:0\n\n[Install]\nWantedBy=multi-user.target' > /etc/systemd/system/qutebrowser.service"
         sudo chroot chroot systemctl enable qutebrowser.service
 
     - name: Package VM Components
