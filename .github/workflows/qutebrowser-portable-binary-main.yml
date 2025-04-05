@@ -22,11 +22,19 @@ jobs:
         sudo chroot chroot apt-get install -y software-properties-common
         sudo chroot chroot add-apt-repository universe
         sudo chroot chroot apt-get update
-        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit
+        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
-        # Set up auto-login and X start
+        # Set up auto-login for root on tty1
+        sudo mkdir -p chroot/etc/systemd/system/getty@tty1.service.d
+        sudo bash -c 'cat > chroot/etc/systemd/system/getty@tty1.service.d/override.conf << EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin root --noclear %I $TERM
+EOF'
+        sudo chroot chroot systemctl enable getty@tty1.service
+        # Set up X and Qutebrowser
         sudo chroot chroot bash -c "echo 'exec startx' > /root/.bash_profile"
         sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host' > /root/.xinitrc"
         sudo chroot chroot bash -c "echo 'exec /usr/bin/qutebrowser' >> /root/.xinitrc"
@@ -90,6 +98,7 @@ jobs:
           -vga virtio
           -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
           -serial mon:stdio
+          -device virtio-vga
         )
 
         echo "Starting Qutebrowser VM..."
