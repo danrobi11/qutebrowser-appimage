@@ -168,7 +168,6 @@ jobs:
         rm -f CMakeCache.txt || true
 
         echo "Running CMake for WebEngine..."
-        # --- FIXED: Removed trailing comment, ensured all flags present ---
         set -x
         cmake .. \
           -GNinja \
@@ -215,8 +214,10 @@ jobs:
         qmake -v
 
         echo "Attempting to build PyQt6 and PyQt6-WebEngine from source..."
+        # --- FIXED: Added --confirm-license=yes config setting ---
         python3 -m pip install --no-cache-dir --verbose --no-binary :all: \
           --config-settings="--qmake=/opt/qt6-static/bin/qmake" \
+          --config-settings="--confirm-license=yes" \
           PyQt6 PyQt6-sip PyQt6-WebEngine
 
         echo "Verifying PyQt6 installation..."
