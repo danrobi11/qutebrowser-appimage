@@ -22,14 +22,17 @@ jobs:
         sudo chroot chroot apt-get install -y software-properties-common
         sudo chroot chroot add-apt-repository universe
         sudo chroot chroot apt-get update
-        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri
+        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri xserver-xorg-video-qxl
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
         # Create a startup script to launch X and Qutebrowser directly
         sudo chroot chroot bash -c "echo '#!/bin/bash' > /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'startx /usr/bin/qutebrowser' >> /start-qutebrowser.sh"
+        sudo chroot chroot bash -c "echo 'echo \"Starting Qutebrowser VM...\"' >> /start-qutebrowser.sh"
+        sudo chroot chroot bash -c "echo 'mkdir -p /mnt/host' >> /start-qutebrowser.sh"
+        sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host || echo \"Mount failed\"' >> /start-qutebrowser.sh"
+        sudo chroot chroot bash -c "echo 'export DISPLAY=:0' >> /start-qutebrowser.sh"
+        sudo chroot chroot bash -c "echo 'startx /usr/bin/qutebrowser -- :0 vt1' >> /start-qutebrowser.sh"
         sudo chroot chroot chmod +x /start-qutebrowser.sh
 
     - name: Package VM Components
