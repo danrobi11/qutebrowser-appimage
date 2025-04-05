@@ -33,8 +33,11 @@ jobs:
       run: |
         sudo cp chroot/boot/vmlinuz-* kernel
         sudo cp chroot/boot/initrd.img-* initrd
-        # Create a 2GB raw disk image and copy chroot into it
-        sudo dd if=/dev/zero of=filesystem.img bs=1M count=2048
+        # Check chroot size
+        echo "Chroot size:"
+        sudo du -sh chroot
+        # Create a 4GB raw disk image and copy chroot into it
+        sudo dd if=/dev/zero of=filesystem.img bs=1M count=4096
         sudo mkfs.ext4 -F filesystem.img
         sudo mkdir /mnt/chroot
         sudo mount -o loop filesystem.img /mnt/chroot
