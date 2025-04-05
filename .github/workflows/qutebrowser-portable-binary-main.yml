@@ -62,11 +62,11 @@ jobs:
           exit 1
         }
 
-        # Use ~/tmp for extraction to avoid /tmp size limits
+        # Use ~/tmp for extraction, skip /dev nodes
         mkdir -p "$HOME/tmp"
         TEMP_DIR=$(mktemp -d -p "$HOME/tmp")
         echo "Extracting filesystem to $TEMP_DIR (needs ~1.5 GB free)..."
-        tar -xzf "$FS" -C "$TEMP_DIR" || {
+        tar -xzf "$FS" -C "$TEMP_DIR" --exclude='./dev/*' || {
           echo "Error: Failed to extract filesystem.tar.gz."
           echo "Check free space in $HOME/tmp:"
           df -h "$HOME/tmp"
