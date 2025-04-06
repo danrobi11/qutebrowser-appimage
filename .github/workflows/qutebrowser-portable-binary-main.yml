@@ -22,7 +22,7 @@ jobs:
         # Group apt operations with set -e and logging
         sudo chroot chroot bash -c '
         set -e
-        export DEBIAN_FRONTEND=noninteractive # Ensure no interactive prompts
+        export DEBIAN_FRONTEND=noninteractive
 
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
@@ -31,20 +31,30 @@ jobs:
         apt-get install -y --no-install-recommends software-properties-common
 
         echo "--- CHROOT: Adding universe repository ---"
-        add-apt-repository universe -y # Add -y to auto-confirm
+        add-apt-repository universe -y
 
         echo "--- CHROOT: Updating apt lists (2nd time, after adding repo) ---"
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
-        # --- FIXED: Removed xserver-xorg-video-virtio ---
+        # --- FIXED: Added initramfs-tools ---
         apt-get install -y --no-install-recommends \
             qutebrowser \
             linux-image-generic \
+            initramfs-tools \
             xserver-xorg-core \
             xinit \
-            xterm # Keep xterm for testing
+            xterm
         echo "--- CHROOT: Main package installation complete ---"
+
+        # --- FIXED: Explicitly generate initrd ---
+        echo "--- CHROOT: Generating initramfs ---"
+        update-initramfs -c -k all
+        echo "--- CHROOT: Initramfs generation complete ---"
+
+        echo "--- CHROOT: Verifying /boot contents ---"
+        ls -l /boot || echo "/boot not found or ls failed"
+        # --- End Fixes ---
 
         echo "--- CHROOT: Cleaning apt cache ---"
         apt-get clean
@@ -58,40 +68,24 @@ jobs:
         sudo bash -c "cat > chroot/root/start_qutebrowser.sh" << 'EOF'
         #!/bin/bash
         echo "--- Running start_qutebrowser.sh ---"
-
-        # Mount host share
-        echo "Creating /mnt/host..."
         mkdir -p /mnt/host
         echo "Mounting hostshare..."
-        mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host
-        if [ $? -ne 0 ]; then echo "Mount failed!"; fi # Basic check
-
-        # Set display
+        mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host || echo "Mount failed!"
         export DISPLAY=:0
-        echo "DISPLAY set to $DISPLAY"
-
-        # Start Xorg in the background
         echo "Starting Xorg..."
         /usr/bin/Xorg $DISPLAY &
         XORG_PID=$!
-
-        # Wait for X socket to appear (more reliable than sleep)
         echo "Waiting for X socket /tmp/.X11-unix/X0..."
+        X_SOCKET_WAIT_COUNT=0
         while [ ! -e /tmp/.X11-unix/X0 ]; do
           sleep 0.5
-          # Check if Xorg died
-          if ! ps -p $XORG_PID > /dev/null; then
-            echo "Xorg process died unexpectedly!"
-            break
-          fi
+          X_SOCKET_WAIT_COUNT=$((X_SOCKET_WAIT_COUNT + 1))
+          if ! ps -p $XORG_PID > /dev/null; then echo "Xorg process died!"; break; fi
+          if [ $X_SOCKET_WAIT_COUNT -gt 20 ]; then echo "X socket wait timeout!"; break; fi # Add timeout
         done
-        echo "X socket found."
-
-        # Launch Qutebrowser
+        if [ -e /tmp/.X11-unix/X0 ]; then echo "X socket found."; else echo "X socket NOT found."; fi
         echo "Launching Qutebrowser..."
         /usr/bin/qutebrowser
-
-        # Fallback/debug shell if qutebrowser exits
         echo "Qutebrowser exited. Starting fallback shell."
         exec /bin/bash
         EOF
@@ -101,21 +95,26 @@ jobs:
 
     - name: Package VM Components
       run: |
+        # --- FIXED: Add check before copying ---
+        echo "Listing host view of chroot/boot before copy:"
+        sudo ls -l chroot/boot || echo "Could not list chroot/boot from host"
+        if ! sudo ls chroot/boot/vmlinuz-* > /dev/null 2>&1; then echo "ERROR: Kernel (vmlinuz-*) not found in chroot/boot"; exit 1; fi
+        if ! sudo ls chroot/boot/initrd.img-* > /dev/null 2>&1; then echo "ERROR: Initrd (initrd.img-*) not found in chroot/boot"; exit 1; fi
+
         sudo cp chroot/boot/vmlinuz-* kernel
         sudo cp chroot/boot/initrd.img-* initrd
         echo "Chroot size:"
         sudo du -sh chroot
         sudo dd if=/dev/zero of=filesystem.img bs=1M count=4096
         sudo mkfs.ext4 -F filesystem.img
-        sudo mkdir -p /mnt/chroot # Use -p
+        sudo mkdir -p /mnt/chroot
         sudo mount -o loop filesystem.img /mnt/chroot
         echo "Copying chroot contents to filesystem image..."
         sudo cp -a chroot/* /mnt/chroot/
         echo "Syncing..."
-        sync # Ensure data is written before unmount
+        sync
         sudo umount /mnt/chroot
         echo "Packaging kernel, initrd, filesystem..."
-        # Note: run script is added in the *next* step
         sudo tar -czf qutebrowser-vm-temp.tar.gz kernel initrd filesystem.img
         ls -lh kernel initrd filesystem.img qutebrowser-vm-temp.tar.gz
 
@@ -177,7 +176,7 @@ jobs:
         # Add the run script to the temporary tar, create final tar
         sudo tar --append --file=qutebrowser-vm-temp.tar.gz run-qutebrowser-vm.sh
         mv qutebrowser-vm-temp.tar.gz qutebrowser-vm.tar.gz
-        # Cleanup individual files? Optional, but cleaner
+        # Cleanup individual files
         rm -f kernel initrd filesystem.img run-qutebrowser-vm.sh
 
         echo "--- Final Package Contents ---"
