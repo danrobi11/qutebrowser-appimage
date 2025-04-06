@@ -13,68 +13,147 @@ jobs:
     - name: Install Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils wget
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils
 
     - name: Create Minimal Ubuntu Chroot
       run: |
         sudo debootstrap --arch=amd64 jammy chroot http://archive.ubuntu.com/ubuntu/
-        sudo chroot chroot apt-get update
-        sudo chroot chroot apt-get install -y software-properties-common
-        sudo chroot chroot add-apt-repository universe
-        sudo chroot chroot apt-get update
-        sudo chroot chroot apt-get install -y linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri xserver-xorg-video-qxl libpulse0 alsa-base alsa-utils
-        # Install Qutebrowser AppImage
-        sudo chroot chroot bash -c "wget -O /usr/bin/qutebrowser https://github.com/qutebrowser/qutebrowser/releases/download/v3.2.0/qutebrowser-3.2.0.AppImage"
-        sudo chroot chroot chmod +x /usr/bin/qutebrowser
-        # Ensure virtio_gpu and 9p modules are included
-        sudo chroot chroot bash -c "echo 'virtio_gpu' >> /etc/initramfs-tools/modules"
-        sudo chroot chroot bash -c "echo '9p' >> /etc/initramfs-tools/modules"
-        sudo chroot chroot bash -c "echo '9pnet' >> /etc/initramfs-tools/modules"
-        sudo chroot chroot bash -c "echo '9pnet_virtio' >> /etc/initramfs-tools/modules"
-        sudo chroot chroot bash -c "update-initramfs -u"
-        sudo chroot chroot apt-get clean
+
+        sudo chroot chroot bash -c '
+        set -e
+        export DEBIAN_FRONTEND=noninteractive
+
+        echo "--- CHROOT: Updating apt lists (1st time) ---"
+        apt-get update
+
+        echo "--- CHROOT: Installing software-properties-common ---"
+        apt-get install -y --no-install-recommends software-properties-common
+
+        echo "--- CHROOT: Adding universe repository ---"
+        add-apt-repository universe -y
+
+        echo "--- CHROOT: Updating apt lists (2nd time, after adding repo) ---"
+        apt-get update
+
+        echo "--- CHROOT: Installing main packages ---"
+        # --- FIXED: Added linux-modules-extra & mesa-utils ---
+        # Determine kernel version to install correct modules-extra
+        KERNEL_VERSION=$(apt-cache search linux-image-generic | grep -oP "linux-image-\K[0-9]+\.[0-9]+\.[0-9]+-[0-9]+(?=-generic)" | head -n 1)
+        echo "--- CHROOT: Detected kernel version for modules: $KERNEL_VERSION ---"
+        apt-get install -y --no-install-recommends \
+            qutebrowser \
+            linux-image-generic \
+            linux-modules-extra-${KERNEL_VERSION}-generic \
+            initramfs-tools \
+            xserver-xorg-core \
+            xinit \
+            xterm \
+            mesa-utils
+        echo "--- CHROOT: Main package installation complete ---"
+
+        # --- FIXED: Add virtio modules to initramfs config ---
+        echo "--- CHROOT: Adding modules to initramfs ---"
+        echo "virtio_pci" >> /etc/initramfs-tools/modules
+        echo "virtio_gpu" >> /etc/initramfs-tools/modules
+        echo "9p" >> /etc/initramfs-tools/modules
+        echo "9pnet_virtio" >> /etc/initramfs-tools/modules
+        # --- End Fix ---
+
+        echo "--- CHROOT: Generating initramfs ---"
+        # Use -u (update) instead of -c (create) if an initrd already exists
+        update-initramfs -u -k all
+        echo "--- CHROOT: Initramfs generation complete ---"
+
+        echo "--- CHROOT: Verifying /boot contents ---"
+        ls -l /boot || echo "/boot not found or ls failed"
+
+        # --- FIXED: Create minimal xorg config for virtio ---
+        echo "--- CHROOT: Creating minimal xorg.conf ---"
+        mkdir -p /etc/X11
+        cat > /etc/X11/xorg.conf << EOCONF
+        Section "Device"
+            Identifier  "Virtio GPU"
+            Driver      "modesetting"
+            # Option      "AccelMethod" "none" # Try disabling acceleration if problems persist
+        EndSection
+
+        Section "Screen"
+            Identifier "Screen0"
+            Device     "Virtio GPU"
+            # Add Monitor section if needed, but often auto-detected
+        EndSection
+        EOCONF
+        echo "--- CHROOT: xorg.conf created ---"
+        # --- End Fix ---
+
+        echo "--- CHROOT: Cleaning apt cache ---"
+        apt-get clean
+        ' # End of chroot bash -c block
+
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
-        sudo chroot chroot bash -c "echo '127.0.0.1 localhost qutebrowser-vm' > /etc/hosts"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
-        # Create a startup script to launch X and Qutebrowser directly (fixed version)
-        sudo chroot chroot bash -c "echo '#!/bin/bash' > /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'set -x' >> /start-qutebrowser.sh"  # Debug output
-        sudo chroot chroot bash -c "echo 'echo \"Starting Qutebrowser VM...\"' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'mkdir -p /mnt/host' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host || echo \"Mount failed\"' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'export DISPLAY=:0' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'export XAUTHORITY=/root/.Xauthority' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'touch /root/.Xauthority' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'hostname qutebrowser-vm' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'startx /usr/bin/qutebrowser --no-sandbox -- :0 vt1 &' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo '# Keep init running to prevent kernel panic' >> /start-qutebrowser.sh"
-        sudo chroot chroot bash -c "echo 'while true; do sleep 3600; done' >> /start-qutebrowser.sh"
-        sudo chroot chroot chmod +x /start-qutebrowser.sh
-        # Configure X11 to use VirtIO GPU with modesetting
-        sudo chroot chroot bash -c "mkdir -p /etc/X11/xorg.conf.d"
-        sudo chroot chroot bash -c "echo 'Section \"Device\"' > /etc/X11/xorg.conf.d/10-virtio.conf"
-        sudo chroot chroot bash -c "echo '  Identifier \"VirtIO GPU\"' >> /etc/X11/xorg.conf.d/10-virtio.conf"
-        sudo chroot chroot bash -c "echo '  Driver \"modesetting\"' >> /etc/X11/xorg.conf.d/10-virtio.conf"
-        sudo chroot chroot bash -c "echo '  Option \"AccelMethod\" \"glamor\"' >> /etc/X11/xorg.conf.d/10-virtio.conf"
-        sudo chroot chroot bash -c "echo 'EndSection' >> /etc/X11/xorg.conf.d/10-virtio.conf"
-        # Configure audio
-        sudo chroot chroot bash -c "mkdir -p /etc/alsa/conf.d"
-        sudo chroot chroot bash -c "echo 'pcm.!default { type hw card 0 }' > /etc/alsa/conf.d/99-virtio.conf"
+
+        # Startup script adjusted for debugging
+        sudo bash -c "cat > chroot/root/start_qutebrowser.sh" << 'EOF'
+        #!/bin/bash
+        echo "--- Running start_qutebrowser.sh ---"
+        # Log everything from here to console/serial
+        # exec > >(tee /dev/ttyS0) 2>&1 # Optional: Send all output to serial
+
+        mkdir -p /mnt/host
+        echo "Mounting hostshare..."
+        mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host || echo "Mount failed! Error code: $?"
+
+        export DISPLAY=:0
+        echo "Starting Xorg..."
+        # Log Xorg output for debugging
+        /usr/bin/Xorg $DISPLAY > /var/log/Xorg.0.log 2>&1 &
+        XORG_PID=$!
+        echo "Waiting for X socket /tmp/.X11-unix/X0..."
+        X_SOCKET_WAIT_COUNT=0
+        while [ ! -e /tmp/.X11-unix/X0 ]; do
+          sleep 0.5
+          X_SOCKET_WAIT_COUNT=$((X_SOCKET_WAIT_COUNT + 1))
+          if ! ps -p $XORG_PID > /dev/null; then echo "Xorg process died! Check /var/log/Xorg.0.log"; break; fi
+          if [ $X_SOCKET_WAIT_COUNT -gt 20 ]; then echo "X socket wait timeout!"; break; fi
+        done
+        if [ -e /tmp/.X11-unix/X0 ]; then echo "X socket found."; else echo "X socket NOT found. Check /var/log/Xorg.0.log"; fi
+
+        echo "Launching Qutebrowser..."
+        # Optional: Test with xterm first
+        # echo "Attempting to launch xterm..."
+        # xterm || echo "xterm launch failed"
+        /usr/bin/qutebrowser || echo "Qutebrowser launch failed!"
+
+        echo "Application exited. Starting fallback shell."
+        exec /bin/bash
+        EOF
+
+        sudo chroot chroot chmod +x /root/start_qutebrowser.sh
+        sudo rm -f chroot/root/.bash_profile
 
     - name: Package VM Components
       run: |
+        echo "Listing host view of chroot/boot before copy:"
+        sudo ls -l chroot/boot || echo "Could not list chroot/boot from host"
+        if ! sudo ls chroot/boot/vmlinuz-* > /dev/null 2>&1; then echo "ERROR: Kernel (vmlinuz-*) not found in chroot/boot"; exit 1; fi
+        if ! sudo ls chroot/boot/initrd.img-* > /dev/null 2>&1; then echo "ERROR: Initrd (initrd.img-*) not found in chroot/boot"; exit 1; fi
+
         sudo cp chroot/boot/vmlinuz-* kernel
         sudo cp chroot/boot/initrd.img-* initrd
         echo "Chroot size:"
         sudo du -sh chroot
         sudo dd if=/dev/zero of=filesystem.img bs=1M count=4096
         sudo mkfs.ext4 -F filesystem.img
-        sudo mkdir /mnt/chroot
+        sudo mkdir -p /mnt/chroot
         sudo mount -o loop filesystem.img /mnt/chroot
+        echo "Copying chroot contents to filesystem image..."
         sudo cp -a chroot/* /mnt/chroot/
+        echo "Syncing..."
+        sync
         sudo umount /mnt/chroot
-        sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.img
-        ls -lh kernel initrd filesystem.img qutebrowser-vm.tar.gz
+        echo "VM components (kernel, initrd, filesystem.img) created."
+        ls -lh kernel initrd filesystem.img
 
     - name: Create Simple Run Script
       run: |
@@ -83,19 +162,10 @@ jobs:
         set -e
 
         QEMU_BIN="qemu-system-x86_64"
-        SPICE_BIN="spicy"
 
-        # Check for QEMU
         command -v "$QEMU_BIN" >/dev/null 2>&1 || {
           echo "Error: $QEMU_BIN not found."
           echo "Please install QEMU first (e.g., 'sudo xbps-install -S qemu' on Void)."
-          exit 1
-        }
-
-        # Check for spicy
-        command -v "$SPICE_BIN" >/dev/null 2>&1 || {
-          echo "Error: $SPICE_BIN not found."
-          echo "Please install spice-gtk (e.g., 'sudo xbps-install -S spice-gtk' on Void)."
           exit 1
         }
 
@@ -105,7 +175,7 @@ jobs:
         FS="$SCRIPT_DIR/filesystem.img"
 
         [ -f "$KERNEL" ] && [ -f "$INITRD" ] && [ -f "$FS" ] || {
-          echo "Error: Missing VM components (kernel, initrd, or filesystem.img)."
+          echo "Error: Missing VM components (kernel, initrd, or filesystem.img) in $SCRIPT_DIR."
           exit 1
         }
 
@@ -113,49 +183,41 @@ jobs:
         GUEST_MOUNT="/mnt/host"
         echo "Sharing your home directory ($HOST_SHARE) at $GUEST_MOUNT in Qutebrowser."
         echo "Open files with 'file://$GUEST_MOUNT/path/to/file' (e.g., 'file:///mnt/host/Documents/test.html')."
-        echo "Starting Qutebrowser VM with SPICE display on port 5900..."
+        echo "Connecting to SPICE display on port 5900..."
+        echo "Run: 'spicy -h 127.0.0.1 -p 5900' to see Qutebrowser (install with 'sudo xbps-install -S spice-gtk')."
+        echo "VM console output will appear below:"
 
         QEMU_ARGS=(
           -kernel "$KERNEL"
           -initrd "$INITRD"
           -drive "file=$FS,format=raw,if=virtio"
-          -append "root=/dev/vda console=ttyS0 rw init=/start-qutebrowser.sh"
+          -append "root=/dev/vda console=ttyS0 rw init=/root/start_qutebrowser.sh"
           -m 1G
           -cpu host
           -enable-kvm
-          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=none"
+          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare"
           -vga virtio
-          -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
-          -serial mon:stdio
-          -device virtio-vga
-          -device "virtio-sound,audiodev=snd0"
-          -audiodev "spice,id=snd0"
+          -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" # Explicit TCP port
+          -serial stdio
+          -device ac97
         )
 
-        # Start QEMU in the background
-        "$QEMU_BIN" "${QEMU_ARGS[@]}" &
-        QEMU_PID=$!
-
-        # Give QEMU a moment to start the SPICE server
-        sleep 2
-
-        # Start spicy to connect to the SPICE display
-        "$SPICE_BIN" -h 127.0.0.1 -p 5900 &
-        SPICE_PID=$!
-
-        # Trap to clean up both processes on exit
-        trap 'kill $QEMU_PID $SPICE_PID 2>/dev/null' EXIT
-
-        # Wait for QEMU to finish
-        wait $QEMU_PID
+        echo "Starting Qutebrowser VM..."
+        "$QEMU_BIN" "${QEMU_ARGS[@]}"
+        echo "QEMU exited."
         EOF
         chmod +x run-qutebrowser-vm.sh
 
     - name: Bundle Package
       run: |
+        echo "Packaging kernel, initrd, filesystem, and run script..."
         sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.img run-qutebrowser-vm.sh
-        echo "--- Package Contents ---"
-        sudo tar -tvf qutebrowser-vm.tar.gz
+
+        # Cleanup individual files
+        rm -f kernel initrd filesystem.img run-qutebrowser-vm.sh
+
+        echo "--- Final Package Contents ---"
+        tar -tvf qutebrowser-vm.tar.gz
         echo "------------------------"
         ls -lh qutebrowser-vm.tar.gz
         tar -ztvf qutebrowser-vm.tar.gz | awk '{sum+=$3} END {printf "Estimated Uncompressed Size: %.2f MB\n", sum/1024/1024}'
