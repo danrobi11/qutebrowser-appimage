@@ -13,7 +13,7 @@ jobs:
     - name: Install Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd # Added passwd
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd
 
     - name: Create Minimal Ubuntu Chroot
       run: |
@@ -51,12 +51,10 @@ jobs:
         # Create non-root user
         echo "--- CHROOT: Creating user quteuser ---"
         useradd -m -s /bin/bash quteuser || echo "User quteuser might already exist"
-        # --- FIXED: Use passwd -d instead of chpasswd ---
         echo "--- CHROOT: Deleting password for quteuser ---"
         passwd -d quteuser
         echo "--- CHROOT: Deleting password for root ---"
         passwd -d root
-        # --- End Fix ---
 
         echo "--- CHROOT: Adding modules to initramfs ---"
         echo "virtio_pci" >> /etc/initramfs-tools/modules
@@ -78,9 +76,7 @@ jobs:
         apt-get clean
         ' # End of chroot bash -c block
 
-        # Non-chroot commands
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
-        # Passwords handled via passwd -d inside chroot
 
         # Startup script - Launch Qutebrowser as non-root user
         sudo bash -c "cat > chroot/sbin/qute_init" << 'EOF'
@@ -92,6 +88,10 @@ jobs:
 
         export DISPLAY=:0
         export ROOT_XAUTHORITY=/root/.Xauthority
+        # --- FIXED: Touch file *before* xauth add ---
+        touch "$ROOT_XAUTHORITY" || echo "Failed to touch $ROOT_XAUTHORITY"
+        chmod 600 "$ROOT_XAUTHORITY"
+        # --- End Fix ---
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
         COOKIE=$(mcookie)
         echo "Generated cookie: $COOKIE"
@@ -122,21 +122,17 @@ jobs:
         if [ -e /tmp/.X11-unix/X0 ]; then
             echo "X socket found."
             echo "Attempting to launch Qutebrowser as user $USER_NAME..."
-            export QUTE_BASEDIR="/mnt/host/.local/share/qutebrowser-vm"
-            export QUTE_CONFIGDIR="/mnt/host/.config/qutebrowser-vm"
-            export QUTE_DATADIR="/mnt/host/.local/share/qutebrowser-vm"
-            mkdir -p "$QUTE_BASEDIR" "$QUTE_CONFIGDIR" "$QUTE_DATADIR"
-            # Ensure the user can write to these dirs on the host via 9p
-            # This might require adjusting host permissions or 9p mount options later
-            chown -R $USER_NAME:$USER_NAME "$QUTE_BASEDIR" "$QUTE_CONFIGDIR" "$QUTE_DATADIR" || echo "Warning: Could not chown qutebrowser dirs in /mnt/host"
+            # --- FIXED: Create dirs inside VM, use only --basedir ---
+            export QUTE_VM_BASEDIR="$USER_HOME/.qutebrowser-vm" # Path inside VM
+            mkdir -p "$QUTE_VM_BASEDIR"
+            chown -R $USER_NAME:$USER_NAME "$QUTE_VM_BASEDIR" || echo "Warning: Could not chown qutebrowser dir in VM"
 
             runuser -u $USER_NAME -- \
                 env DISPLAY="$DISPLAY" XAUTHORITY="$USER_XAUTHORITY" \
                 /usr/bin/qutebrowser \
-                --basedir "$QUTE_BASEDIR" \
-                --configdir "$QUTE_CONFIGDIR" \
-                --datadir "$QUTE_DATADIR" \
+                --basedir "$QUTE_VM_BASEDIR" \
                 || echo "Qutebrowser launch as user $USER_NAME failed!"
+            # --- End Fix ---
         else
             echo "X socket NOT found."
             X_DIED=1
@@ -188,7 +184,8 @@ jobs:
         [ -f "$KERNEL" ] && [ -f "$INITRD" ] && [ -f "$FS" ] || { echo "Error: Missing VM components in $SCRIPT_DIR."; exit 1; }
         HOST_SHARE="$HOME"; GUEST_MOUNT="/mnt/host"
         echo "Sharing $HOST_SHARE at $GUEST_MOUNT"; echo "Use: file://$GUEST_MOUNT/..."
-        echo "Qutebrowser data/config will be stored in $HOST_SHARE/.local/share/qutebrowser-vm and $HOST_SHARE/.config/qutebrowser-vm"
+        # --- FIXED: Update message about where data is stored ---
+        echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image (ephemeral)."
         echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
         echo "VM console output will appear below:"
         QEMU_ARGS=( -kernel "$KERNEL" -initrd "$INITRD" -drive "file=$FS,format=raw,if=virtio" -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init" -m 1G -cpu host -enable-kvm -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" -vga virtio -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" -serial stdio -device ac97 -device usb-ehci,id=ehci -device usb-tablet,bus=ehci.0 -device usb-kbd,bus=ehci.0 )
