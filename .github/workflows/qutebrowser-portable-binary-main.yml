@@ -25,7 +25,7 @@ jobs:
 
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
-        apt-get install -y --no-install-recommends software-properties-common
+        apt-get install -y --no-install-recommends software-properties-common passwd # Ensure passwd util is installed early
         add-apt-repository universe -y
         apt-get update
 
@@ -45,17 +45,17 @@ jobs:
             xauth fonts-dejavu-core \
             xserver-xorg-input-libinput \
             x11-utils \
-            sudo # Keep sudo in case needed later
-            passwd # Contains useradd/usermod
+            sudo
         echo "--- CHROOT: Main package installation complete ---"
 
-        # --- FIXED: Create non-root user ---
+        # Create non-root user
         echo "--- CHROOT: Creating user quteuser ---"
         useradd -m -s /bin/bash quteuser || echo "User quteuser might already exist"
-        # Optional: Add user to groups (video, input, audio?) - might be needed later
-        # usermod -a -G video,input,audio quteuser
-        echo "quteuser:quteuser" | chpasswd # Set a simple password
-        echo "--- CHROOT: User created ---"
+        # --- FIXED: Use passwd -d instead of chpasswd ---
+        echo "--- CHROOT: Deleting password for quteuser ---"
+        passwd -d quteuser
+        echo "--- CHROOT: Deleting password for root ---"
+        passwd -d root
         # --- End Fix ---
 
         echo "--- CHROOT: Adding modules to initramfs ---"
@@ -80,8 +80,7 @@ jobs:
 
         # Non-chroot commands
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
-        # Keep root password for potential debugging at fallback shell
-        sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
+        # Passwords handled via passwd -d inside chroot
 
         # Startup script - Launch Qutebrowser as non-root user
         sudo bash -c "cat > chroot/sbin/qute_init" << 'EOF'
@@ -89,29 +88,23 @@ jobs:
         echo "--- Running Init Script ---"
         mkdir -p /mnt/host
         echo "Mounting hostshare..."
-        # Mount with potentially more permissive options? uid/gid mapping later if needed.
         mount -t 9p -o trans=virtio,version=9p2000.L,access=any hostshare /mnt/host || echo "Mount failed! Error code: $?"
 
         export DISPLAY=:0
-        # Root generates the cookie first
         export ROOT_XAUTHORITY=/root/.Xauthority
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
         COOKIE=$(mcookie)
         echo "Generated cookie: $COOKIE"
-        # Add cookie using host:display format which xauth prefers
         xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add failed!"
-        # xauth -f "$ROOT_XAUTHORITY" list # List root cookie
 
-        # Prepare for non-root user
         USER_NAME=quteuser
         USER_HOME=/home/$USER_NAME
         USER_XAUTHORITY="$USER_HOME/.Xauthority"
-        mkdir -p "$USER_HOME" # Ensure home exists
+        mkdir -p "$USER_HOME"
         cp "$ROOT_XAUTHORITY" "$USER_XAUTHORITY" || echo "Failed to copy Xauthority"
         chown $USER_NAME:$USER_NAME "$USER_XAUTHORITY" || echo "Failed to chown Xauthority"
-        chown $USER_NAME:$USER_NAME "$USER_HOME" # Ensure home dir ownership
+        chown $USER_NAME:$USER_NAME "$USER_HOME"
         echo "User Xauthority prepared at $USER_XAUTHORITY"
-        # ls -l "$USER_XAUTHORITY" # Verify ownership
 
         echo "Starting Xorg..."
         /usr/bin/Xorg $DISPLAY > /var/log/Xorg.0.log 2>&1 &
@@ -128,18 +121,15 @@ jobs:
 
         if [ -e /tmp/.X11-unix/X0 ]; then
             echo "X socket found."
-            # Launch as non-root user using runuser
             echo "Attempting to launch Qutebrowser as user $USER_NAME..."
-            # Use specific basedir/datadir/configdir within the shared mount
-            # This keeps the VM somewhat stateless and stores data on the host
             export QUTE_BASEDIR="/mnt/host/.local/share/qutebrowser-vm"
             export QUTE_CONFIGDIR="/mnt/host/.config/qutebrowser-vm"
             export QUTE_DATADIR="/mnt/host/.local/share/qutebrowser-vm"
             mkdir -p "$QUTE_BASEDIR" "$QUTE_CONFIGDIR" "$QUTE_DATADIR"
-            chown -R $USER_NAME:$USER_NAME "$QUTE_BASEDIR" "$QUTE_CONFIGDIR" "$QUTE_DATADIR"
+            # Ensure the user can write to these dirs on the host via 9p
+            # This might require adjusting host permissions or 9p mount options later
+            chown -R $USER_NAME:$USER_NAME "$QUTE_BASEDIR" "$QUTE_CONFIGDIR" "$QUTE_DATADIR" || echo "Warning: Could not chown qutebrowser dirs in /mnt/host"
 
-            # Use runuser which is slightly cleaner than su for non-interactive execution
-            # Pass necessary environment variables explicitly
             runuser -u $USER_NAME -- \
                 env DISPLAY="$DISPLAY" XAUTHORITY="$USER_XAUTHORITY" \
                 /usr/bin/qutebrowser \
@@ -147,7 +137,6 @@ jobs:
                 --configdir "$QUTE_CONFIGDIR" \
                 --datadir "$QUTE_DATADIR" \
                 || echo "Qutebrowser launch as user $USER_NAME failed!"
-
         else
             echo "X socket NOT found."
             X_DIED=1
@@ -160,7 +149,6 @@ jobs:
         fi
 
         echo "Application exited or failed. Starting fallback root shell."
-        # Fallback shell still runs as root for easier debugging
         exec /bin/bash
         EOF
 
