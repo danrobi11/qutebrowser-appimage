@@ -18,17 +18,43 @@ jobs:
     - name: Create Minimal Ubuntu Chroot
       run: |
         sudo debootstrap --arch=amd64 jammy chroot http://archive.ubuntu.com/ubuntu/
-        sudo chroot chroot apt-get update
-        sudo chroot chroot apt-get install -y --no-install-recommends software-properties-common # Use --no-install-recommends
-        sudo chroot chroot add-apt-repository universe
-        sudo chroot chroot apt-get update
-        # Install minimal X and drivers, including virtio video
-        sudo chroot chroot apt-get install -y --no-install-recommends qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-virtio xterm # Added video driver and xterm for testing
-        sudo chroot chroot apt-get clean
+
+        # --- FIXED: Group apt operations with set -e and logging ---
+        sudo chroot chroot bash -c '
+        set -e
+        export DEBIAN_FRONTEND=noninteractive # Ensure no interactive prompts
+
+        echo "--- CHROOT: Updating apt lists (1st time) ---"
+        apt-get update
+
+        echo "--- CHROOT: Installing software-properties-common ---"
+        apt-get install -y --no-install-recommends software-properties-common
+
+        echo "--- CHROOT: Adding universe repository ---"
+        add-apt-repository universe
+
+        echo "--- CHROOT: Updating apt lists (2nd time, after adding repo) ---"
+        apt-get update
+
+        echo "--- CHROOT: Installing main packages ---"
+        apt-get install -y --no-install-recommends \
+            qutebrowser \
+            linux-image-generic \
+            xserver-xorg-core \
+            xinit \
+            xserver-xorg-video-virtio \
+            xterm
+        echo "--- CHROOT: Main package installation complete ---"
+
+        echo "--- CHROOT: Cleaning apt cache ---"
+        apt-get clean
+        ' # End of chroot bash -c block
+
+        # Continue with non-apt chroot commands
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
 
-        # --- FIXED: Revised start_qutebrowser.sh ---
+        # Set up X and Qutebrowser script
         sudo bash -c "cat > chroot/root/start_qutebrowser.sh" << 'EOF'
         #!/bin/bash
         echo "--- Running start_qutebrowser.sh ---"
@@ -56,7 +82,6 @@ jobs:
           # Check if Xorg died
           if ! ps -p $XORG_PID > /dev/null; then
             echo "Xorg process died unexpectedly!"
-            # Keep script running maybe? Or exit? Let's just proceed for now.
             break
           fi
         done
@@ -68,8 +93,6 @@ jobs:
 
         # Fallback/debug shell if qutebrowser exits
         echo "Qutebrowser exited. Starting fallback shell."
-        # Optional: start xterm here instead if you prefer graphical debugging
-        # xterm &
         exec /bin/bash
         EOF
 
@@ -93,19 +116,11 @@ jobs:
         sync # Ensure data is written before unmount
         sudo umount /mnt/chroot
         echo "Packaging kernel, initrd, filesystem..."
-        sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.img
-        ls -lh kernel initrd filesystem.img qutebrowser-vm.tar.gz
+        # Note: run script is added in the *next* step
+        sudo tar -czf qutebrowser-vm-temp.tar.gz kernel initrd filesystem.img
+        ls -lh kernel initrd filesystem.img qutebrowser-vm-temp.tar.gz
 
     - name: Create Simple Run Script
-      # Run script content needs updating below, this step just creates the file
-      run: |
-        cat > run-qutebrowser-vm.sh << 'EOF'
-        # Content will be generated in the next step
-        EOF
-        chmod +x run-qutebrowser-vm.sh
-
-    - name: Update Run Script Content
-      # Separate step to avoid issues with complex quoting inside the previous one
       run: |
         cat > run-qutebrowser-vm.sh << 'EOF'
         #!/bin/bash
@@ -133,11 +148,10 @@ jobs:
         GUEST_MOUNT="/mnt/host"
         echo "Sharing your home directory ($HOST_SHARE) at $GUEST_MOUNT in Qutebrowser."
         echo "Open files with 'file://$GUEST_MOUNT/path/to/file' (e.g., 'file:///mnt/host/Documents/test.html')."
-        echo "Connecting to SPICE display on port 5900..."
-        echo "Run: 'spicy -h 127.0.0.1 -p 5900' to see Qutebrowser (install with 'sudo xbps-install -S spice-gtk')."
+        echo "Connecting to SPICE display..."
+        echo "Run: 'spicy' (or spicy connected to the auto-detected socket) to see Qutebrowser (install with 'sudo xbps-install -S spice-gtk')."
         echo "VM console output will appear below:"
 
-        # --- FIXED: Use init= for startup script, add -serial stdio ---
         QEMU_ARGS=(
           -kernel "$KERNEL"
           -initrd "$INITRD"
@@ -146,27 +160,29 @@ jobs:
           -m 1G # Memory size
           -cpu host # Use host CPU features
           -enable-kvm # Use hardware acceleration
-          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" # Added id
+          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare"
           -vga virtio # Use virtio GPU
-          -display spice-app # Use SPICE display
-          # -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" # Replaced by -display spice-app for better integration
+          -display spice-app # Use SPICE display integration
           -serial stdio # Route guest serial console to host terminal
           -soundhw hda # Add a basic sound device
         )
 
         echo "Starting Qutebrowser VM..."
         "$QEMU_BIN" "${QEMU_ARGS[@]}"
-        # Removed backgrounding (&) and trap/wait, run QEMU in foreground
-        # Ctrl+C in the terminal will now stop QEMU directly.
         echo "QEMU exited."
         EOF
+        chmod +x run-qutebrowser-vm.sh
 
     - name: Bundle Package
       run: |
-        # Ensure run script is included
-        sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.img run-qutebrowser-vm.sh
-        echo "--- Package Contents ---"
-        sudo tar -tvf qutebrowser-vm.tar.gz
+        # Add the run script to the temporary tar, create final tar
+        sudo tar --append --file=qutebrowser-vm-temp.tar.gz run-qutebrowser-vm.sh
+        mv qutebrowser-vm-temp.tar.gz qutebrowser-vm.tar.gz
+        # Cleanup individual files? Optional, but cleaner
+        rm kernel initrd filesystem.img run-qutebrowser-vm.sh
+
+        echo "--- Final Package Contents ---"
+        tar -tvf qutebrowser-vm.tar.gz
         echo "------------------------"
         ls -lh qutebrowser-vm.tar.gz
         tar -ztvf qutebrowser-vm.tar.gz | awk '{sum+=$3} END {printf "Estimated Uncompressed Size: %.2f MB\n", sum/1024/1024}'
