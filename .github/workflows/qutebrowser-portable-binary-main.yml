@@ -13,7 +13,7 @@ jobs:
     - name: Install Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils wget
 
     - name: Create Minimal Ubuntu Chroot
       run: |
@@ -21,9 +21,11 @@ jobs:
         sudo chroot chroot apt-get update
         sudo chroot chroot apt-get install -y software-properties-common
         sudo chroot chroot add-apt-repository universe
-        sudo chroot chroot add-apt-repository -y ppa:qutebrowser/qutebrowser  # Add Qutebrowser PPA
         sudo chroot chroot apt-get update
-        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri xserver-xorg-video-qxl libpulse0 alsa-base alsa-utils
+        sudo chroot chroot apt-get install -y linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri xserver-xorg-video-qxl libpulse0 alsa-base alsa-utils
+        # Install Qutebrowser AppImage
+        sudo chroot chroot bash -c "wget -O /usr/bin/qutebrowser https://github.com/qutebrowser/qutebrowser/releases/download/v3.2.0/qutebrowser-3.2.0.AppImage"
+        sudo chroot chroot chmod +x /usr/bin/qutebrowser
         # Ensure virtio_gpu and 9p modules are included
         sudo chroot chroot bash -c "echo 'virtio_gpu' >> /etc/initramfs-tools/modules"
         sudo chroot chroot bash -c "echo '9p' >> /etc/initramfs-tools/modules"
