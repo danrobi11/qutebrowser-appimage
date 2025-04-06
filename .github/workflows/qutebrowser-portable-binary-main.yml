@@ -13,7 +13,7 @@ jobs:
     - name: Install Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd # Added passwd
 
     - name: Create Minimal Ubuntu Chroot
       run: |
@@ -44,8 +44,19 @@ jobs:
             libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 \
             xauth fonts-dejavu-core \
             xserver-xorg-input-libinput \
-            x11-utils
+            x11-utils \
+            sudo # Keep sudo in case needed later
+            passwd # Contains useradd/usermod
         echo "--- CHROOT: Main package installation complete ---"
+
+        # --- FIXED: Create non-root user ---
+        echo "--- CHROOT: Creating user quteuser ---"
+        useradd -m -s /bin/bash quteuser || echo "User quteuser might already exist"
+        # Optional: Add user to groups (video, input, audio?) - might be needed later
+        # usermod -a -G video,input,audio quteuser
+        echo "quteuser:quteuser" | chpasswd # Set a simple password
+        echo "--- CHROOT: User created ---"
+        # --- End Fix ---
 
         echo "--- CHROOT: Adding modules to initramfs ---"
         echo "virtio_pci" >> /etc/initramfs-tools/modules
@@ -60,39 +71,47 @@ jobs:
         echo "--- CHROOT: Verifying /boot contents ---"
         ls -l /boot || echo "/boot not found or ls failed"
 
-        # --- FIXED: Remove minimal xorg.conf ---
         echo "--- CHROOT: Removing custom xorg.conf ---"
         rm -f /etc/X11/xorg.conf
-        # --- End Fix ---
 
         echo "--- CHROOT: Cleaning apt cache ---"
         apt-get clean
         ' # End of chroot bash -c block
 
+        # Non-chroot commands
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
+        # Keep root password for potential debugging at fallback shell
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
 
-        # Startup script - Generate Xauthority cookie, run xdpyinfo
+        # Startup script - Launch Qutebrowser as non-root user
         sudo bash -c "cat > chroot/sbin/qute_init" << 'EOF'
         #!/bin/bash
         echo "--- Running Init Script ---"
         mkdir -p /mnt/host
         echo "Mounting hostshare..."
-        mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host || echo "Mount failed! Error code: $?"
+        # Mount with potentially more permissive options? uid/gid mapping later if needed.
+        mount -t 9p -o trans=virtio,version=9p2000.L,access=any hostshare /mnt/host || echo "Mount failed! Error code: $?"
 
         export DISPLAY=:0
-        export XAUTHORITY=/root/.Xauthority
-        # --- FIXED: Generate proper Xauth cookie ---
+        # Root generates the cookie first
+        export ROOT_XAUTHORITY=/root/.Xauthority
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
         COOKIE=$(mcookie)
         echo "Generated cookie: $COOKIE"
         # Add cookie using host:display format which xauth prefers
-        xauth add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add failed!"
-        xauth list
-        # --- End Fix ---
+        xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add failed!"
+        # xauth -f "$ROOT_XAUTHORITY" list # List root cookie
 
-        # Check /tmp permissions
-        ls -ld /tmp /tmp/.X11-unix || echo "Could not list /tmp perms"
+        # Prepare for non-root user
+        USER_NAME=quteuser
+        USER_HOME=/home/$USER_NAME
+        USER_XAUTHORITY="$USER_HOME/.Xauthority"
+        mkdir -p "$USER_HOME" # Ensure home exists
+        cp "$ROOT_XAUTHORITY" "$USER_XAUTHORITY" || echo "Failed to copy Xauthority"
+        chown $USER_NAME:$USER_NAME "$USER_XAUTHORITY" || echo "Failed to chown Xauthority"
+        chown $USER_NAME:$USER_NAME "$USER_HOME" # Ensure home dir ownership
+        echo "User Xauthority prepared at $USER_XAUTHORITY"
+        # ls -l "$USER_XAUTHORITY" # Verify ownership
 
         echo "Starting Xorg..."
         /usr/bin/Xorg $DISPLAY > /var/log/Xorg.0.log 2>&1 &
@@ -109,16 +128,26 @@ jobs:
 
         if [ -e /tmp/.X11-unix/X0 ]; then
             echo "X socket found."
-            echo "Attempting to run xdpyinfo..."
-            if xdpyinfo; then
-              echo "xdpyinfo SUCCEEDED."
-              # If xdpyinfo works, try qutebrowser
-              echo "Launching Qutebrowser..."
-              /usr/bin/qutebrowser || echo "Qutebrowser launch failed!"
-            else
-              echo "xdpyinfo FAILED! Check Xorg log."
-              X_DIED=1 # Treat as failure
-            fi
+            # Launch as non-root user using runuser
+            echo "Attempting to launch Qutebrowser as user $USER_NAME..."
+            # Use specific basedir/datadir/configdir within the shared mount
+            # This keeps the VM somewhat stateless and stores data on the host
+            export QUTE_BASEDIR="/mnt/host/.local/share/qutebrowser-vm"
+            export QUTE_CONFIGDIR="/mnt/host/.config/qutebrowser-vm"
+            export QUTE_DATADIR="/mnt/host/.local/share/qutebrowser-vm"
+            mkdir -p "$QUTE_BASEDIR" "$QUTE_CONFIGDIR" "$QUTE_DATADIR"
+            chown -R $USER_NAME:$USER_NAME "$QUTE_BASEDIR" "$QUTE_CONFIGDIR" "$QUTE_DATADIR"
+
+            # Use runuser which is slightly cleaner than su for non-interactive execution
+            # Pass necessary environment variables explicitly
+            runuser -u $USER_NAME -- \
+                env DISPLAY="$DISPLAY" XAUTHORITY="$USER_XAUTHORITY" \
+                /usr/bin/qutebrowser \
+                --basedir "$QUTE_BASEDIR" \
+                --configdir "$QUTE_CONFIGDIR" \
+                --datadir "$QUTE_DATADIR" \
+                || echo "Qutebrowser launch as user $USER_NAME failed!"
+
         else
             echo "X socket NOT found."
             X_DIED=1
@@ -130,7 +159,8 @@ jobs:
             echo "----- END /var/log/Xorg.0.log -----"
         fi
 
-        echo "Application exited or failed. Starting fallback shell."
+        echo "Application exited or failed. Starting fallback root shell."
+        # Fallback shell still runs as root for easier debugging
         exec /bin/bash
         EOF
 
@@ -170,6 +200,7 @@ jobs:
         [ -f "$KERNEL" ] && [ -f "$INITRD" ] && [ -f "$FS" ] || { echo "Error: Missing VM components in $SCRIPT_DIR."; exit 1; }
         HOST_SHARE="$HOME"; GUEST_MOUNT="/mnt/host"
         echo "Sharing $HOST_SHARE at $GUEST_MOUNT"; echo "Use: file://$GUEST_MOUNT/..."
+        echo "Qutebrowser data/config will be stored in $HOST_SHARE/.local/share/qutebrowser-vm and $HOST_SHARE/.config/qutebrowser-vm"
         echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
         echo "VM console output will appear below:"
         QEMU_ARGS=( -kernel "$KERNEL" -initrd "$INITRD" -drive "file=$FS,format=raw,if=virtio" -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init" -m 1G -cpu host -enable-kvm -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" -vga virtio -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" -serial stdio -device ac97 -device usb-ehci,id=ehci -device usb-tablet,bus=ehci.0 -device usb-kbd,bus=ehci.0 )
