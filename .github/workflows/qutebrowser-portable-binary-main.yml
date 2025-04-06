@@ -22,9 +22,10 @@ jobs:
         sudo chroot chroot apt-get install -y software-properties-common
         sudo chroot chroot add-apt-repository universe
         sudo chroot chroot apt-get update
-        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri xserver-xorg-video-qxl libpulse0 alsa-base alsa-utils
+        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri xserver-xorg-video-qxl libpulse0 alsa-base alsa-utils 9pnet-virtio
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
+        sudo chroot chroot bash -c "echo '127.0.0.1 localhost qutebrowser-vm' > /etc/hosts"  # Fix hostname
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
         # Create a startup script to launch X and Qutebrowser directly (fixed version)
         sudo chroot chroot bash -c "echo '#!/bin/bash' > /start-qutebrowser.sh"
@@ -33,15 +34,18 @@ jobs:
         sudo chroot chroot bash -c "echo 'mkdir -p /mnt/host' >> /start-qutebrowser.sh"
         sudo chroot chroot bash -c "echo 'mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host || echo \"Mount failed\"' >> /start-qutebrowser.sh"
         sudo chroot chroot bash -c "echo 'export DISPLAY=:0' >> /start-qutebrowser.sh"
+        sudo chroot chroot bash -c "echo 'touch /root/.Xauthority' >> /start-qutebrowser.sh"  # Fix xauth
         sudo chroot chroot bash -c "echo 'startx /usr/bin/qutebrowser -- :0 vt1 &' >> /start-qutebrowser.sh"  # Run in background
         sudo chroot chroot bash -c "echo '# Keep init running to prevent kernel panic' >> /start-qutebrowser.sh"
         sudo chroot chroot bash -c "echo 'while true; do sleep 3600; done' >> /start-qutebrowser.sh"  # Prevent exit
         sudo chroot chroot chmod +x /start-qutebrowser.sh
-        # Configure X11 and audio
+        # Configure X11 to use VirtIO GPU
+        sudo chroot chroot bash -c "mkdir -p /etc/X11/xorg.conf.d"
         sudo chroot chroot bash -c "echo 'Section \"Device\"' > /etc/X11/xorg.conf.d/10-virtio.conf"
         sudo chroot chroot bash -c "echo '  Identifier \"VirtIO GPU\"' >> /etc/X11/xorg.conf.d/10-virtio.conf"
         sudo chroot chroot bash -c "echo '  Driver \"virtio-gpu\"' >> /etc/X11/xorg.conf.d/10-virtio.conf"
         sudo chroot chroot bash -c "echo 'EndSection' >> /etc/X11/xorg.conf.d/10-virtio.conf"
+        # Configure audio
         sudo chroot chroot bash -c "mkdir -p /etc/alsa/conf.d"
         sudo chroot chroot bash -c "echo 'pcm.!default { type hw card 0 }' > /etc/alsa/conf.d/99-virtio.conf"
 
