@@ -37,7 +37,6 @@ jobs:
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
-        # --- FIXED: Added initramfs-tools ---
         apt-get install -y --no-install-recommends \
             qutebrowser \
             linux-image-generic \
@@ -47,24 +46,20 @@ jobs:
             xterm
         echo "--- CHROOT: Main package installation complete ---"
 
-        # --- FIXED: Explicitly generate initrd ---
         echo "--- CHROOT: Generating initramfs ---"
         update-initramfs -c -k all
         echo "--- CHROOT: Initramfs generation complete ---"
 
         echo "--- CHROOT: Verifying /boot contents ---"
         ls -l /boot || echo "/boot not found or ls failed"
-        # --- End Fixes ---
 
         echo "--- CHROOT: Cleaning apt cache ---"
         apt-get clean
         ' # End of chroot bash -c block
 
-        # Continue with non-apt chroot commands
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
 
-        # Set up X and Qutebrowser script
         sudo bash -c "cat > chroot/root/start_qutebrowser.sh" << 'EOF'
         #!/bin/bash
         echo "--- Running start_qutebrowser.sh ---"
@@ -95,7 +90,7 @@ jobs:
 
     - name: Package VM Components
       run: |
-        # --- FIXED: Add check before copying ---
+        # Add check before copying
         echo "Listing host view of chroot/boot before copy:"
         sudo ls -l chroot/boot || echo "Could not list chroot/boot from host"
         if ! sudo ls chroot/boot/vmlinuz-* > /dev/null 2>&1; then echo "ERROR: Kernel (vmlinuz-*) not found in chroot/boot"; exit 1; fi
@@ -114,9 +109,9 @@ jobs:
         echo "Syncing..."
         sync
         sudo umount /mnt/chroot
-        echo "Packaging kernel, initrd, filesystem..."
-        sudo tar -czf qutebrowser-vm-temp.tar.gz kernel initrd filesystem.img
-        ls -lh kernel initrd filesystem.img qutebrowser-vm-temp.tar.gz
+        # Don't create temporary tar here
+        echo "VM components (kernel, initrd, filesystem.img) created."
+        ls -lh kernel initrd filesystem.img
 
     - name: Create Simple Run Script
       run: |
@@ -173,9 +168,10 @@ jobs:
 
     - name: Bundle Package
       run: |
-        # Add the run script to the temporary tar, create final tar
-        sudo tar --append --file=qutebrowser-vm-temp.tar.gz run-qutebrowser-vm.sh
-        mv qutebrowser-vm-temp.tar.gz qutebrowser-vm.tar.gz
+        # --- FIXED: Create final tar in one step ---
+        echo "Packaging kernel, initrd, filesystem, and run script..."
+        sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.img run-qutebrowser-vm.sh
+
         # Cleanup individual files
         rm -f kernel initrd filesystem.img run-qutebrowser-vm.sh
 
