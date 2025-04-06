@@ -22,11 +22,16 @@ jobs:
         sudo chroot chroot apt-get install -y software-properties-common
         sudo chroot chroot add-apt-repository universe
         sudo chroot chroot apt-get update
-        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri xserver-xorg-video-qxl libpulse0 alsa-base alsa-utils 9pnet-virtio
+        sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri xserver-xorg-video-qxl libpulse0 alsa-base alsa-utils
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
         sudo chroot chroot bash -c "echo '127.0.0.1 localhost qutebrowser-vm' > /etc/hosts"  # Fix hostname
         sudo chroot chroot bash -c "echo 'root:root' | chpasswd"
+        # Ensure VirtIO 9p modules are included in initramfs
+        sudo chroot chroot bash -c "echo '9p' >> /etc/initramfs-tools/modules"
+        sudo chroot chroot bash -c "echo '9pnet' >> /etc/initramfs-tools/modules"
+        sudo chroot chroot bash -c "echo '9pnet_virtio' >> /etc/initramfs-tools/modules"
+        sudo chroot chroot bash -c "update-initramfs -u"
         # Create a startup script to launch X and Qutebrowser directly (fixed version)
         sudo chroot chroot bash -c "echo '#!/bin/bash' > /start-qutebrowser.sh"
         sudo chroot chroot bash -c "echo 'set -x' >> /start-qutebrowser.sh"  # Debug output
