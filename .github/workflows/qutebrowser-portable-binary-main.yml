@@ -22,7 +22,6 @@ jobs:
         sudo chroot chroot apt-get install -y software-properties-common
         sudo chroot chroot add-apt-repository universe
         sudo chroot chroot apt-get update
-        # Install all dependencies statically within the chroot
         sudo chroot chroot apt-get install -y qutebrowser linux-image-generic xserver-xorg-core xinit xserver-xorg-video-all libgl1-mesa-dri xserver-xorg-video-qxl libpulse0 alsa-base alsa-utils
         sudo chroot chroot apt-get clean
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
@@ -63,10 +62,7 @@ jobs:
 
     - name: Create Simple Run Script
       run: |
-        # Collect host audio and video group IDs
-        AUDIO_GID=$(getent group audio | cut -d: -f3)
-        VIDEO_GID=$(getent group video | cut -d: -f3)
-        cat > run-qutebrowser-vm.sh << EOF
+        cat > run-qutebrowser-vm.sh << 'EOF'
         #!/bin/bash
         set -e
 
@@ -74,70 +70,68 @@ jobs:
         SPICE_BIN="spicy"
 
         # Check for QEMU
-        command -v "\$QEMU_BIN" >/dev/null 2>&1 || {
-          echo "Error: \$QEMU_BIN not found."
+        command -v "$QEMU_BIN" >/dev/null 2>&1 || {
+          echo "Error: $QEMU_BIN not found."
           echo "Please install QEMU first (e.g., 'sudo xbps-install -S qemu' on Void)."
           exit 1
         }
 
         # Check for spicy
-        command -v "\$SPICE_BIN" >/dev/null 2>&1 || {
-          echo "Error: \$SPICE_BIN not found."
+        command -v "$SPICE_BIN" >/dev/null 2>&1 || {
+          echo "Error: $SPICE_BIN not found."
           echo "Please install spice-gtk (e.g., 'sudo xbps-install -S spice-gtk' on Void)."
           exit 1
         }
 
-        SCRIPT_DIR="\$(dirname "\$(readlink -f "\$0")")"
-        KERNEL="\$SCRIPT_DIR/kernel"
-        INITRD="\$SCRIPT_DIR/initrd"
-        FS="\$SCRIPT_DIR/filesystem.img"
+        SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+        KERNEL="$SCRIPT_DIR/kernel"
+        INITRD="$SCRIPT_DIR/initrd"
+        FS="$SCRIPT_DIR/filesystem.img"
 
-        [ -f "\$KERNEL" ] && [ -f "\$INITRD" ] && [ -f "\$FS" ] || {
+        [ -f "$KERNEL" ] && [ -f "$INITRD" ] && [ -f "$FS" ] || {
           echo "Error: Missing VM components (kernel, initrd, or filesystem.img)."
           exit 1
         }
 
-        HOST_SHARE="\$HOME"
+        HOST_SHARE="$HOME"
         GUEST_MOUNT="/mnt/host"
-        echo "Sharing your home directory (\$HOST_SHARE) at \$GUEST_MOUNT in Qutebrowser."
-        echo "Open files with 'file://\$GUEST_MOUNT/path/to/file' (e.g., 'file:///mnt/host/Documents/test.html')."
+        echo "Sharing your home directory ($HOST_SHARE) at $GUEST_MOUNT in Qutebrowser."
+        echo "Open files with 'file://$GUEST_MOUNT/path/to/file' (e.g., 'file:///mnt/host/Documents/test.html')."
         echo "Starting Qutebrowser VM with SPICE display on port 5900..."
 
         QEMU_ARGS=(
-          -kernel "\$KERNEL"
-          -initrd "\$INITRD"
-          -drive "file=\$FS,format=raw,if=virtio"
+          -kernel "$KERNEL"
+          -initrd "$INITRD"
+          -drive "file=$FS,format=raw,if=virtio"
           -append "root=/dev/vda console=ttyS0 rw init=/start-qutebrowser.sh"
           -m 1G
           -cpu host
           -enable-kvm
-          -virtfs "local,path=\$HOST_SHARE,mount_tag=hostshare,security_model=none"  # Full home access, no sandbox
+          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=none"
           -vga virtio
           -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
           -serial mon:stdio
           -device virtio-vga
           -device "virtio-sound,audiodev=snd0"
           -audiodev "spice,id=snd0"
-          -gid "\${AUDIO_GID:-$AUDIO_GID}"  # Host audio group ID
-          -gid "\${VIDEO_GID:-$VIDEO_GID}"  # Host video group ID
         )
 
         # Start QEMU in the background
-妥善        "\$QEMU_BIN" "\${QEMU_ARGS[@]}" &
-        QEMU_PID=\$!
+        "$QEMU_BIN" "${QEMU_ARGS[@]}" &
+        QEMU_PID=$!
 
         # Give QEMU a moment to start the SPICE server
         sleep 2
 
         # Start spicy to connect to the SPICE display
-        "\$SPICE_BIN" -h 127.0.0.1 -p 5900 &
-        SPICE_PID=\$!
+        "$SPICE_BIN" -h 127.0.0.1 -p 5900 &
+        SPICE_PID=$!
 
         # Trap to clean up both processes on exit
-        trap 'kill \$QEMU_PID \$SPICE_PID 2>/dev/null' EXIT
+        trap 'kill $QEMU_PID $SPICE_PID 2>/dev/null' EXIT
 
         # Wait for QEMU to finish
-        wait \$QEMU_PID
+        wait $QEMU_PID
         EOF
         chmod +x run-qutebrowser-vm.sh
 
