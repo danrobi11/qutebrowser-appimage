@@ -26,41 +26,44 @@ jobs:
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
         # --- NOTE TO AI/EDITOR: DO NOT ADD mcookie HERE! It is part of util-linux ---
-        echo "--- CHROOT: Installing base utils ---"
         apt-get install -y --no-install-recommends software-properties-common passwd hostname
-
-        echo "--- CHROOT: Adding universe repository ---"
         add-apt-repository universe -y
-
-        echo "--- CHROOT: Updating apt lists (2nd time) ---"
         apt-get update
 
-        echo "--- CHROOT: Installing Qutebrowser ---"
-        apt-get install -y --no-install-recommends qutebrowser
+        echo "--- CHROOT: Installing main packages ---"
+        # --- FIXED: Rely ONLY on libinput, remove kbd driver ---
+        apt-get install -y --no-install-recommends \
+            qutebrowser \
+            linux-generic \
+            initramfs-tools \
+            xserver-xorg-core \
+            xinit \
+            xterm \
+            mesa-utils \
+            libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 \
+            libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 \
+            libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 \
+            xauth fonts-dejavu-core \
+            xserver-xorg-input-libinput \
+            # xserver-xorg-input-kbd # REMOVED
+            x11-utils \
+            sudo \
+            netbase \
+            isc-dhcp-client \
+            iproute2 \
+            ifupdown \
+            libx11-xcb1 libfontconfig1 \
+            dnsutils \
+            curl
+        echo "--- CHROOT: Main package installation complete ---"
 
-        echo "--- CHROOT: Installing Kernel and Boot utils ---"
-        apt-get install -y --no-install-recommends linux-generic initramfs-tools
-
-        echo "--- CHROOT: Installing Xorg Core/Base ---"
-        apt-get install -y --no-install-recommends xserver-xorg-core xinit xterm mesa-utils
-
-        echo "--- CHROOT: Installing Xorg Input driver ---"
-        apt-get install -y --no-install-recommends xserver-xorg-input-libinput
-
-        echo "--- CHROOT: Installing XCB/X11 runtime libraries ---"
-        apt-get install -y --no-install-recommends libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libx11-xcb1 libfontconfig1
-
-        echo "--- CHROOT: Installing Xorg Auth/Utils/Fonts ---"
-        apt-get install -y --no-install-recommends xauth fonts-dejavu-core x11-utils
-
-        echo "--- CHROOT: Installing Networking utils ---"
-        apt-get install -y --no-install-recommends sudo netbase isc-dhcp-client iproute2 ifupdown dnsutils curl
-
-        echo "--- CHROOT: Package installation complete ---"
-
-        # Create non-root user
+        # Create non-root user and add to input group
         echo "--- CHROOT: Creating user quteuser ---"
         useradd -m -s /bin/bash quteuser || echo "User quteuser might already exist"
+        # --- FIXED: Add user to input group ---
+        usermod -a -G input quteuser || echo "Failed to add quteuser to input group"
+        # --- End Fix ---
         passwd -d quteuser; passwd -d root
 
         # Add modules to initramfs config
@@ -76,7 +79,6 @@ jobs:
         echo "--- CHROOT: Verifying /boot contents ---"
         ls -l /boot || echo "/boot not found or ls failed"
         rm -f /etc/X11/xorg.conf
-        rm -f /etc/X11/xorg.conf.d/10-keyboard.conf # Ensure no leftover kbd config
 
         # Configure network
         echo "--- CHROOT: Configuring network interface ens6 ---"
@@ -92,13 +94,17 @@ jobs:
         nameserver 8.8.4.4
         EOF_DNS
 
+        # Remove explicit keyboard config
+        echo "--- CHROOT: Removing keyboard xorg config ---"
+        rm -f /etc/X11/xorg.conf.d/10-keyboard.conf
+
         echo "--- CHROOT: Cleaning apt cache ---"
         apt-get clean
         ' # End of chroot bash -c block
 
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
 
-        # Startup script
+        # --- FIXED Startup script: Test with xev, better logging ---
         sudo bash -c "cat > chroot/sbin/qute_init" << 'EOF'
         #!/bin/bash
         echo "--- Running Init Script ---"
@@ -129,7 +135,6 @@ jobs:
         touch "$ROOT_XAUTHORITY" || echo "Failed to touch $ROOT_XAUTHORITY"
         chmod 600 "$ROOT_XAUTHORITY"
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
-        if ! command -v mcookie > /dev/null; then echo "mcookie command not found! Is util-linux installed?"; fi
         COOKIE=$(mcookie)
         echo "Generated cookie: $COOKIE"
         xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add localhost failed!"
@@ -163,23 +168,36 @@ jobs:
           if [ $X_SOCKET_WAIT_COUNT -gt 20 ]; then echo "X socket wait timeout!"; X_DIED=1; break; fi
         done
 
+        # --- Check input devices ---
+        echo "--- Listing /dev/input/event* ---"
+        ls -l /dev/input/event* || echo "Could not list input devices"
+        # ---
+
         if [ -e /tmp/.X11-unix/X0 ]; then
             echo "X socket found."
-            echo "Attempting to launch Qutebrowser as user $USER_NAME..."
-            export QUTE_VM_BASEDIR="$USER_HOME/.qutebrowser-vm"
-            mkdir -p "$QUTE_VM_BASEDIR"
-            chown -R $USER_NAME:$USER_NAME "$QUTE_VM_BASEDIR" || echo "Warning: Could not chown qutebrowser dir in VM"
+            echo "Attempting to launch xev as user $USER_NAME..."
 
-            QT_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/qt5/plugins
-
+            # Try launching xev as the user
             runuser -u $USER_NAME -- \
                 env DISPLAY="$DISPLAY" XAUTHORITY="$USER_XAUTHORITY" \
                     XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-                    QT_QPA_PLATFORM_PLUGIN_PATH="$QT_PLUGIN_PATH" \
-                    QT_DEBUG_PLUGINS=1 \
-                /usr/bin/qutebrowser \
-                --basedir "$QUTE_VM_BASEDIR" \
-                || echo "Qutebrowser launch as user $USER_NAME failed!"
+                xev \
+                || echo "xev launch failed!"
+
+            # Comment out xev and uncomment qutebrowser if xev works
+            # echo "Attempting to launch Qutebrowser as user $USER_NAME..."
+            # export QUTE_VM_BASEDIR="$USER_HOME/.qutebrowser-vm"
+            # mkdir -p "$QUTE_VM_BASEDIR"
+            # chown -R $USER_NAME:$USER_NAME "$QUTE_VM_BASEDIR" || echo "Warning: Could not chown qutebrowser dir in VM"
+            # QT_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/qt5/plugins
+            # runuser -u $USER_NAME -- \
+            #     env DISPLAY="$DISPLAY" XAUTHORITY="$USER_XAUTHORITY" \
+            #         XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+            #         QT_QPA_PLATFORM_PLUGIN_PATH="$QT_PLUGIN_PATH" \
+            #         QT_DEBUG_PLUGINS=1 \
+            #     /usr/bin/qutebrowser \
+            #     --basedir "$QUTE_VM_BASEDIR" \
+            #     || echo "Qutebrowser launch as user $USER_NAME failed!"
         else
             echo "X socket NOT found."
             X_DIED=1
@@ -187,8 +205,8 @@ jobs:
 
         if [ $X_DIED -eq 1 ]; then
             echo "----- BEGIN /var/log/Xorg.0.log -----"
-            grep -iE 'input|keyboard|evdev|libinput|kbd' /var/log/Xorg.0.log || echo "No specific input lines found in log."
-            echo "--- (Full log also available if needed) ---"
+            # Print full log if X startup failed
+            cat /var/log/Xorg.0.log || echo "Failed to cat Xorg log"
             echo "----- END /var/log/Xorg.0.log -----"
         fi
 
