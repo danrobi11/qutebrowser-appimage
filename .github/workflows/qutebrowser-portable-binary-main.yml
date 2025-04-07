@@ -13,7 +13,7 @@ jobs:
     - name: Install Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname mcookie netbase isc-dhcp-client iproute2 # Added network utils
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname # Added passwd & hostname
 
     - name: Create Minimal Ubuntu Chroot
       run: |
@@ -25,12 +25,12 @@ jobs:
 
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
-        apt-get install -y --no-install-recommends software-properties-common passwd hostname mcookie # Ensure utils installed
+        # --- FIXED: Removed mcookie from this install list ---
+        apt-get install -y --no-install-recommends software-properties-common passwd hostname # Ensure utils installed
         add-apt-repository universe -y
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
-        # --- FIXED: Added network tools ---
         apt-get install -y --no-install-recommends \
             qutebrowser \
             linux-generic \
@@ -66,7 +66,7 @@ jobs:
         echo "virtio_gpu" >> /etc/initramfs-tools/modules
         echo "9p" >> /etc/initramfs-tools/modules
         echo "9pnet_virtio" >> /etc/initramfs-tools/modules
-        echo "e1000" >> /etc/initramfs-tools/modules # Ensure network driver is available early
+        echo "e1000" >> /etc/initramfs-tools/modules
 
         echo "--- CHROOT: Generating initramfs ---"
         update-initramfs -u -k all
@@ -76,14 +76,13 @@ jobs:
         ls -l /boot || echo "/boot not found or ls failed"
         rm -f /etc/X11/xorg.conf
 
-        # --- FIXED: Add basic network config ---
+        # Configure network
         echo "--- CHROOT: Configuring network interface ens3 ---"
         mkdir -p /etc/network/interfaces.d/
         cat > /etc/network/interfaces.d/ens3 << EOF_NET
         auto ens3
         iface ens3 inet dhcp
         EOF_NET
-        # --- End Fix ---
 
         echo "--- CHROOT: Cleaning apt cache ---"
         apt-get clean
@@ -110,19 +109,17 @@ jobs:
         echo "Mounting hostshare..."
         mount -t 9p -o trans=virtio,version=9p2000.L,access=any hostshare /mnt/host || echo "Mount failed! Error code: $?"
 
-        # --- Bring up network ---
         echo "Bringing up network interface ens3..."
         ifup ens3 || echo "ifup ens3 failed"
-        sleep 2 # Give DHCP a moment
+        sleep 2
         ip addr show ens3 || echo "ip addr show ens3 failed"
-        # --- End Network ---
 
         export DISPLAY=:0
         export ROOT_XAUTHORITY=/root/.Xauthority
         touch "$ROOT_XAUTHORITY" || echo "Failed to touch $ROOT_XAUTHORITY"
         chmod 600 "$ROOT_XAUTHORITY"
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
-        COOKIE=$(mcookie)
+        COOKIE=$(mcookie) # Should work now as mcookie is part of util-linux
         echo "Generated cookie: $COOKIE"
         xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add localhost failed!"
 
@@ -214,28 +211,7 @@ jobs:
         echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image (ephemeral)."
         echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
         echo "VM console output will appear below:"
-
-        # --- FIXED: Added network device, removed usb-kbd ---
-        QEMU_ARGS=(
-          -kernel "$KERNEL"
-          -initrd "$INITRD"
-          -drive "file=$FS,format=raw,if=virtio"
-          -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init"
-          -m 1G
-          -cpu host
-          -enable-kvm
-          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare"
-          -vga virtio
-          -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
-          -serial stdio
-          -device ac97
-          -device usb-ehci,id=ehci
-          -device usb-tablet,bus=ehci.0 # Keep tablet for mouse
-          # -device usb-kbd,bus=ehci.0 # REMOVED USB Keyboard
-          -netdev user,id=net0 # Add user-mode network device
-          -device e1000,netdev=net0 # Connect E1000 card to it
-        )
-
+        QEMU_ARGS=( -kernel "$KERNEL" -initrd "$INITRD" -drive "file=$FS,format=raw,if=virtio" -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init" -m 1G -cpu host -enable-kvm -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" -vga virtio -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" -serial stdio -device ac97 -device usb-ehci,id=ehci -device usb-tablet,bus=ehci.0 ) # Removed usb-kbd
         echo "Starting Qutebrowser VM..."; "$QEMU_BIN" "${QEMU_ARGS[@]}"; echo "QEMU exited."
         EOF
         chmod +x run-qutebrowser-vm.sh
