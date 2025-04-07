@@ -31,7 +31,7 @@ jobs:
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
-        # --- FIXED: Added xserver-xorg-input-kbd back ---
+        # --- FIXED: Rely ONLY on libinput, remove kbd driver ---
         apt-get install -y --no-install-recommends \
             qutebrowser \
             linux-generic \
@@ -46,7 +46,7 @@ jobs:
             libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 \
             xauth fonts-dejavu-core \
             xserver-xorg-input-libinput \
-            xserver-xorg-input-kbd \
+            # xserver-xorg-input-kbd # REMOVED
             x11-utils \
             sudo \
             netbase \
@@ -68,9 +68,7 @@ jobs:
         echo "virtio_pci" >> /etc/initramfs-tools/modules; echo "virtio_gpu" >> /etc/initramfs-tools/modules
         echo "9p" >> /etc/initramfs-tools/modules; echo "9pnet_virtio" >> /etc/initramfs-tools/modules
         echo "e1000" >> /etc/initramfs-tools/modules
-        # Add input modules? Might help early detection.
-        echo "atkbd" >> /etc/initramfs-tools/modules # PS/2 keyboard
-        echo "psmouse" >> /etc/initramfs-tools/modules # PS/2 mouse
+        # No need for atkbd/psmouse if we force USB
 
         echo "--- CHROOT: Generating initramfs ---"
         update-initramfs -u -k all
@@ -78,7 +76,7 @@ jobs:
 
         echo "--- CHROOT: Verifying /boot contents ---"
         ls -l /boot || echo "/boot not found or ls failed"
-        rm -f /etc/X11/xorg.conf # Still remove main conf
+        rm -f /etc/X11/xorg.conf
 
         # Configure network
         echo "--- CHROOT: Configuring network interface ens6 ---"
@@ -94,20 +92,9 @@ jobs:
         nameserver 8.8.4.4
         EOF_DNS
 
-        # --- FIXED: Add explicit keyboard config for Xorg ---
-        echo "--- CHROOT: Creating keyboard xorg config ---"
-        mkdir -p /etc/X11/xorg.conf.d
-        cat > /etc/X11/xorg.conf.d/10-keyboard.conf << EOF_KBD
-        Section "InputClass"
-                Identifier "system-keyboard"
-                MatchIsKeyboard "on"
-                Option "XkbLayout" "us" # Set a default layout
-                # Optionally force libinput driver if needed, but auto should be fine
-                # Driver "libinput"
-                # Or try forcing kbd driver if libinput fails with PS/2?
-                # Driver "kbd"
-        EndSection
-        EOF_KBD
+        # --- FIXED: Remove explicit keyboard config ---
+        echo "--- CHROOT: Removing keyboard xorg config ---"
+        rm -f /etc/X11/xorg.conf.d/10-keyboard.conf
         # --- End Fix ---
 
         echo "--- CHROOT: Cleaning apt cache ---"
@@ -207,7 +194,6 @@ jobs:
 
         if [ $X_DIED -eq 1 ]; then
             echo "----- BEGIN /var/log/Xorg.0.log -----"
-            # Check for common input errors
             grep -iE 'input|keyboard|evdev|libinput|kbd' /var/log/Xorg.0.log || echo "No specific input lines found in log."
             echo "--- (Full log also available if needed) ---"
             # cat /var/log/Xorg.0.log || echo "Failed to cat Xorg log"
@@ -257,7 +243,7 @@ jobs:
         echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image (ephemeral)."
         echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
         echo "VM console output will appear below:"
-        # --- FIXED: Removed usb-kbd, relying on default PS/2 ---
+        # --- FIXED: Added usb-kbd back ---
         QEMU_ARGS=(
           -kernel "$KERNEL"
           -initrd "$INITRD"
@@ -273,7 +259,7 @@ jobs:
           -device ac97
           -device usb-ehci,id=ehci
           -device usb-tablet,bus=ehci.0 # Keep tablet for mouse
-          # -device usb-kbd,bus=ehci.0 # REMOVED explicit USB keyboard
+          -device usb-kbd,bus=ehci.0   # Add USB Keyboard back
           -netdev user,id=net0
           -device e1000,netdev=net0
         )
