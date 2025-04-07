@@ -33,10 +33,6 @@ jobs:
         apt-get install -y --no-install-recommends qutebrowser linux-generic initramfs-tools xserver-xorg-core xinit xterm mesa-utils libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 xauth fonts-dejavu-core xserver-xorg-input-libinput x11-utils sudo netbase isc-dhcp-client iproute2 ifupdown libx11-xcb1 libfontconfig1 dnsutils curl
         echo "--- CHROOT: Main package installation complete ---"
 
-        echo "--- CHROOT: Removing kernel headers to save space ---"
-        rm -rf /usr/src/linux-headers-*
-        echo "--- CHROOT: Kernel headers removed ---"
-
         echo "--- CHROOT: Trimming unused kernel modules and dependencies ---"
         apt-get autoremove -y
         KERNEL_VERSION=$(ls /boot/vmlinuz-* | sed "s|.*/vmlinuz-||")
@@ -197,7 +193,7 @@ jobs:
         sudo cp chroot/boot/initrd.img-* initrd
         echo "Chroot size:"
         sudo du -sh chroot
-        sudo dd if=/dev/zero of=filesystem.img bs=1M count=2048
+        sudo dd if=/dev/zero of=filesystem.img bs=1M count=3072
         sudo mkfs.ext4 -F filesystem.img
         sudo mkdir -p /mnt/chroot
         sudo mount -o loop filesystem.img /mnt/chroot
@@ -220,7 +216,7 @@ jobs:
         [ -f "$KERNEL" ] && [ -f "$INITRD" ] && [ -f "$FS" ] || { echo "Error: Missing VM components in $SCRIPT_DIR."; exit 1; }
         HOST_SHARE="$HOME"; GUEST_MOUNT="/mnt/host"
         echo "Sharing $HOST_SHARE at $GUEST_MOUNT"; echo "Use: file://$GUEST_MOUNT/..."
-        echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image (ephemeral)."
+        echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image    image (ephemeral)."
         echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
         echo "VM console output will appear below:"
         QEMU_ARGS=( -kernel "$KERNEL" -initrd "$INITRD" -drive "file=$FS,format=raw,if=virtio" -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init" -m 1G -cpu host -enable-kvm -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" -vga virtio -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" -serial stdio -device ac97 -device usb-ehci,id=ehci -device usb-tablet,bus=ehci.0 -device usb-kbd,bus=ehci.0 -netdev user,id=net0 -device e1000,netdev=net0 )
