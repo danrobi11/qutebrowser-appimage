@@ -25,22 +25,25 @@ jobs:
 
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
-        # --- NOTE TO AI/EDITOR: DO NOT ADD mcookie HERE! It is part of util-linux ---
-        apt-get install -y --no-install-recommends software-properties-common passwd hostname # Ensure utils installed
+        apt-get install -y --no-install-recommends software-properties-common passwd hostname
         add-apt-repository universe -y
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
-        # --- FIXED: Put all packages on one line ---
         apt-get install -y --no-install-recommends qutebrowser linux-generic initramfs-tools xserver-xorg-core xinit xterm mesa-utils libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 xauth fonts-dejavu-core xserver-xorg-input-libinput x11-utils sudo netbase isc-dhcp-client iproute2 ifupdown libx11-xcb1 libfontconfig1 dnsutils curl
         echo "--- CHROOT: Main package installation complete ---"
 
-        # Create non-root user
+        # Trim unused kernel modules and dependencies
+        echo "--- CHROOT: Trimming unused kernel modules and dependencies ---"
+        apt-get autoremove -y
+        find /lib/modules -name "*.ko" -type f | grep -v -e virtio -e 9p -e e1000 -e usb -e input -e evdev -e snd -e drm -e i915 -e xhci -e ehci -e hid | xargs rm -f
+        depmod -a
+        echo "--- CHROOT: Trimming complete ---"
+
         echo "--- CHROOT: Creating user quteuser ---"
         useradd -m -s /bin/bash quteuser || echo "User quteuser might already exist"
         passwd -d quteuser; passwd -d root
 
-        # Add modules to initramfs config
         echo "--- CHROOT: Adding modules to initramfs ---"
         echo "virtio_pci" >> /etc/initramfs-tools/modules; echo "virtio_gpu" >> /etc/initramfs-tools/modules
         echo "9p" >> /etc/initramfs-tools/modules; echo "9pnet_virtio" >> /etc/initramfs-tools/modules
@@ -54,7 +57,6 @@ jobs:
         ls -l /boot || echo "/boot not found or ls failed"
         rm -f /etc/X11/xorg.conf
 
-        # Configure network
         echo "--- CHROOT: Configuring network interface ens6 ---"
         mkdir -p /etc/network/interfaces.d/
         cat > /etc/network/interfaces.d/ens6 << EOF_NET
@@ -70,19 +72,18 @@ jobs:
 
         echo "--- CHROOT: Cleaning apt cache ---"
         apt-get clean
-        ' # End of chroot bash -c block
+        '
 
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
 
-        # Startup script
         sudo bash -c "cat > chroot/sbin/qute_init" << 'EOF'
         #!/bin/bash
         echo "--- Running Init Script ---"
         hostname qutebrowser-vm || echo "hostname command failed"
         echo "Hostname set to: $(hostname)"
         echo "Mounting pseudo-filesystems (/proc, /sys, /dev/pts)..."
-        mount -t proc proc /proc || echo "Mount /proc failed"
-        mount -t sysfs sysfs /sys || echo "Mount /sys failed"
+        mount -t proc proc /proc || { echo "Mount /proc failed! Exiting."; exit 1; }
+        mount -t sysfs sysfs /sys || { echo "Mount /sys failed! Exiting."; exit 1; }
         mkdir -p /dev/pts
         mount -t devpts devpts /dev/pts || echo "Mount /dev/pts failed"
         echo "Mounting /dev/shm..."
@@ -134,18 +135,18 @@ jobs:
         echo "Starting Xorg..."
         /usr/bin/Xorg $DISPLAY > /var/log/Xorg.0.log 2>&1 &
         XORG_PID=$!
-        echo "Waiting for X socket /tmp/.X11-unix/X0..."
+        echo "Waiting for X socket /tmp/.X11-unix/X0 and verifying Xorg health..."
         X_SOCKET_WAIT_COUNT=0
         X_DIED=0
-        while [ ! -e /tmp/.X11-unix/X0 ]; do
+        while [ ! -e /tmp/.X11-unix/X0 ] || ! ps -p $XORG_PID > /dev/null; do
           sleep 0.5
           X_SOCKET_WAIT_COUNT=$((X_SOCKET_WAIT_COUNT + 1))
           if ! ps -p $XORG_PID > /dev/null; then echo "Xorg process died!"; X_DIED=1; break; fi
           if [ $X_SOCKET_WAIT_COUNT -gt 20 ]; then echo "X socket wait timeout!"; X_DIED=1; break; fi
         done
 
-        if [ -e /tmp/.X11-unix/X0 ]; then
-            echo "X socket found."
+        if [ -e /tmp/.X11-unix/X0 ] && ps -p $XORG_PID > /dev/null; then
+            echo "X socket found and Xorg is running."
             echo "Attempting to launch Qutebrowser as user $USER_NAME..."
             export QUTE_VM_BASEDIR="$USER_HOME/.qutebrowser-vm"
             mkdir -p "$QUTE_VM_BASEDIR"
@@ -162,7 +163,7 @@ jobs:
                 --basedir "$QUTE_VM_BASEDIR" \
                 || echo "Qutebrowser launch as user $USER_NAME failed!"
         else
-            echo "X socket NOT found."
+            echo "X socket NOT found or Xorg failed."
             X_DIED=1
         fi
 
@@ -190,7 +191,7 @@ jobs:
         sudo cp chroot/boot/initrd.img-* initrd
         echo "Chroot size:"
         sudo du -sh chroot
-        sudo dd if=/dev/zero of=filesystem.img bs=1M count=4096
+        sudo dd if=/dev/zero of=filesystem.img bs=1M count=2048
         sudo mkfs.ext4 -F filesystem.img
         sudo mkdir -p /mnt/chroot
         sudo mount -o loop filesystem.img /mnt/chroot
