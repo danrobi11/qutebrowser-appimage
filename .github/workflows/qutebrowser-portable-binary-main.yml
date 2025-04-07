@@ -33,22 +33,15 @@ jobs:
         apt-get install -y --no-install-recommends qutebrowser linux-generic initramfs-tools xserver-xorg-core xinit xterm mesa-utils libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 xauth fonts-dejavu-core xserver-xorg-input-libinput x11-utils sudo netbase isc-dhcp-client iproute2 ifupdown libx11-xcb1 libfontconfig1 dnsutils curl
         echo "--- CHROOT: Main package installation complete ---"
 
-        echo "--- CHROOT: Trimming unused kernel modules and dependencies ---"
-        apt-get autoremove -y
-        KERNEL_VERSION=$(ls /boot/vmlinuz-* | sed "s|.*/vmlinuz-||")
-        echo "Detected kernel version: $KERNEL_VERSION"
-        depmod -a "$KERNEL_VERSION"
-        find /lib/modules/"$KERNEL_VERSION" -name "*.ko" -type f | grep -v -e virtio -e 9p -e e1000 -e usb -e input -e evdev -e snd -e drm -e i915 -e xhci -e ehci -e hid | xargs rm -f
-        depmod -a "$KERNEL_VERSION"
-        echo "--- CHROOT: Trimming complete ---"
-
         echo "--- CHROOT: Creating user quteuser ---"
         useradd -m -s /bin/bash quteuser || echo "User quteuser might already exist"
         passwd -d quteuser; passwd -d root
 
         echo "--- CHROOT: Adding modules to initramfs ---"
-        echo "virtio_pci" >> /etc/initramfs-tools/modules; echo "virtio_gpu" >> /etc/initramfs-tools/modules
-        echo "9p" >> /etc/initramfs-tools/modules; echo "9pnet_virtio" >> /etc/initramfs-tools/modules
+        echo "virtio_pci" >> /etc/initramfs-tools/modules
+        echo "virtio_gpu" >> /etc/initramfs-tools/modules
+        echo "9p" >> /etc/initramfs-tools/modules
+        echo "9pnet_virtio" >> /etc/initramfs-tools/modules
         echo "e1000" >> /etc/initramfs-tools/modules
 
         echo "--- CHROOT: Generating initramfs ---"
@@ -108,6 +101,9 @@ jobs:
         echo "--- Testing HTTP connection ---"
         curl -I http://example.com || echo "Curl failed!"
         echo "--- Network tests complete ---"
+
+        echo "--- Checking loaded modules ---"
+        lsmod | grep virtio || echo "No virtio modules loaded!"
 
         export DISPLAY=:0
         export ROOT_XAUTHORITY=/root/.Xauthority
@@ -193,7 +189,7 @@ jobs:
         sudo cp chroot/boot/initrd.img-* initrd
         echo "Chroot size:"
         sudo du -sh chroot
-        sudo dd if=/dev/zero of=filesystem.img bs=1M count=3072
+        sudo dd if=/dev/zero of=filesystem.img bs=1M count=4096
         sudo mkfs.ext4 -F filesystem.img
         sudo mkdir -p /mnt/chroot
         sudo mount -o loop filesystem.img /mnt/chroot
