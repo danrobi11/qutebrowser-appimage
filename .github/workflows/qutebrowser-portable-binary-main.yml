@@ -25,6 +25,7 @@ jobs:
 
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
+        # --- NOTE TO AI/EDITOR: DO NOT ADD mcookie HERE! It is part of util-linux ---
         # --- FIXED AGAIN: Removed mcookie from this install list ---
         apt-get install -y --no-install-recommends software-properties-common passwd hostname # Ensure utils installed
         add-apt-repository universe -y
@@ -51,7 +52,8 @@ jobs:
             netbase \
             isc-dhcp-client \
             iproute2 \
-            ifupdown
+            ifupdown \
+            libx11-xcb1 libfontconfig1
         echo "--- CHROOT: Main package installation complete ---"
 
         # Create non-root user
@@ -64,10 +66,8 @@ jobs:
 
         # Add modules to initramfs config
         echo "--- CHROOT: Adding modules to initramfs ---"
-        echo "virtio_pci" >> /etc/initramfs-tools/modules
-        echo "virtio_gpu" >> /etc/initramfs-tools/modules
-        echo "9p" >> /etc/initramfs-tools/modules
-        echo "9pnet_virtio" >> /etc/initramfs-tools/modules
+        echo "virtio_pci" >> /etc/initramfs-tools/modules; echo "virtio_gpu" >> /etc/initramfs-tools/modules
+        echo "9p" >> /etc/initramfs-tools/modules; echo "9pnet_virtio" >> /etc/initramfs-tools/modules
         echo "e1000" >> /etc/initramfs-tools/modules
 
         echo "--- CHROOT: Generating initramfs ---"
@@ -79,11 +79,11 @@ jobs:
         rm -f /etc/X11/xorg.conf
 
         # Configure network
-        echo "--- CHROOT: Configuring network interface ens3 ---"
+        echo "--- CHROOT: Configuring network interface ens6 ---"
         mkdir -p /etc/network/interfaces.d/
-        cat > /etc/network/interfaces.d/ens3 << EOF_NET
-        auto ens3
-        iface ens3 inet dhcp
+        cat > /etc/network/interfaces.d/ens6 << EOF_NET
+        auto ens6
+        iface ens6 inet dhcp
         EOF_NET
 
         echo "--- CHROOT: Cleaning apt cache ---"
@@ -111,17 +111,17 @@ jobs:
         echo "Mounting hostshare..."
         mount -t 9p -o trans=virtio,version=9p2000.L,access=any hostshare /mnt/host || echo "Mount failed! Error code: $?"
 
-        echo "Bringing up network interface ens3..."
-        ifup ens3 || echo "ifup ens3 failed"
+        echo "Bringing up network interface ens6..."
+        ifup ens6 || echo "ifup ens6 failed"
         sleep 2
-        ip addr show ens3 || echo "ip addr show ens3 failed"
+        ip addr show ens6 || echo "ip addr show ens6 failed"
 
         export DISPLAY=:0
         export ROOT_XAUTHORITY=/root/.Xauthority
         touch "$ROOT_XAUTHORITY" || echo "Failed to touch $ROOT_XAUTHORITY"
         chmod 600 "$ROOT_XAUTHORITY"
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
-        COOKIE=$(mcookie) # mcookie command is part of util-linux (already installed)
+        COOKIE=$(mcookie) # This should work now as mcookie is part of util-linux
         echo "Generated cookie: $COOKIE"
         xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add localhost failed!"
 
@@ -133,6 +133,14 @@ jobs:
         chown $USER_NAME:$USER_NAME "$USER_XAUTHORITY" || echo "Failed to chown Xauthority"
         chown $USER_NAME:$USER_NAME "$USER_HOME"
         echo "User Xauthority prepared at $USER_XAUTHORITY"
+
+        # Create and set XDG_RUNTIME_DIR
+        XDG_RUNTIME_DIR=/run/user/$(id -u $USER_NAME)
+        mkdir -p "$XDG_RUNTIME_DIR"
+        chown $USER_NAME:$USER_NAME "$XDG_RUNTIME_DIR"
+        chmod 700 "$XDG_RUNTIME_DIR"
+        export XDG_RUNTIME_DIR
+        echo "XDG_RUNTIME_DIR set to $XDG_RUNTIME_DIR"
 
         echo "Starting Xorg..."
         /usr/bin/Xorg $DISPLAY > /var/log/Xorg.0.log 2>&1 &
@@ -154,8 +162,13 @@ jobs:
             mkdir -p "$QUTE_VM_BASEDIR"
             chown -R $USER_NAME:$USER_NAME "$QUTE_VM_BASEDIR" || echo "Warning: Could not chown qutebrowser dir in VM"
 
+            QT_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/qt5/plugins
+
             runuser -u $USER_NAME -- \
                 env DISPLAY="$DISPLAY" XAUTHORITY="$USER_XAUTHORITY" \
+                    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+                    QT_QPA_PLATFORM_PLUGIN_PATH="$QT_PLUGIN_PATH" \
+                    QT_DEBUG_PLUGINS=1 \
                 /usr/bin/qutebrowser \
                 --basedir "$QUTE_VM_BASEDIR" \
                 || echo "Qutebrowser launch as user $USER_NAME failed!"
