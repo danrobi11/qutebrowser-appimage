@@ -13,7 +13,7 @@ jobs:
     - name: Install Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname # Added passwd & hostname
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname netbase isc-dhcp-client iproute2 ifupdown dnsutils curl # Added network utils
 
     - name: Create Minimal Ubuntu Chroot
       run: |
@@ -26,12 +26,12 @@ jobs:
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
         # --- NOTE TO AI/EDITOR: DO NOT ADD mcookie HERE! It is part of util-linux ---
-        # --- FIXED AGAIN: Removed mcookie from this install list ---
         apt-get install -y --no-install-recommends software-properties-common passwd hostname # Ensure utils installed
         add-apt-repository universe -y
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
+        # --- FIXED: Removed kbd driver, added network/dns utils ---
         apt-get install -y --no-install-recommends \
             qutebrowser \
             linux-generic \
@@ -46,23 +46,22 @@ jobs:
             libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 \
             xauth fonts-dejavu-core \
             xserver-xorg-input-libinput \
-            xserver-xorg-input-kbd \
+            # xserver-xorg-input-kbd # REMOVED - libinput handles USB kbd
             x11-utils \
             sudo \
             netbase \
             isc-dhcp-client \
             iproute2 \
             ifupdown \
-            libx11-xcb1 libfontconfig1
+            libx11-xcb1 libfontconfig1 \
+            dnsutils \
+            curl
         echo "--- CHROOT: Main package installation complete ---"
 
         # Create non-root user
         echo "--- CHROOT: Creating user quteuser ---"
         useradd -m -s /bin/bash quteuser || echo "User quteuser might already exist"
-        echo "--- CHROOT: Deleting password for quteuser ---"
-        passwd -d quteuser
-        echo "--- CHROOT: Deleting password for root ---"
-        passwd -d root
+        passwd -d quteuser; passwd -d root
 
         # Add modules to initramfs config
         echo "--- CHROOT: Adding modules to initramfs ---"
@@ -85,6 +84,12 @@ jobs:
         auto ens6
         iface ens6 inet dhcp
         EOF_NET
+        echo "--- CHROOT: Configuring /etc/resolv.conf ---"
+        cat > /etc/resolv.conf << EOF_DNS
+        nameserver 8.8.8.8
+        nameserver 1.1.1.1
+        nameserver 8.8.4.4
+        EOF_DNS
 
         echo "--- CHROOT: Cleaning apt cache ---"
         apt-get clean
@@ -92,7 +97,7 @@ jobs:
 
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
 
-        # Startup script
+        # --- FIXED Startup script: Enhanced Xorg log check ---
         sudo bash -c "cat > chroot/sbin/qute_init" << 'EOF'
         #!/bin/bash
         echo "--- Running Init Script ---"
@@ -113,15 +118,23 @@ jobs:
 
         echo "Bringing up network interface ens6..."
         ifup ens6 || echo "ifup ens6 failed"
-        sleep 2
+        sleep 3
+        echo "--- Network status ---"
         ip addr show ens6 || echo "ip addr show ens6 failed"
+        echo "--- Testing IP connectivity ---"
+        ping -c 1 8.8.8.8 || echo "Ping failed!"
+        echo "--- Testing DNS resolution ---"
+        dig qutebrowser.org @8.8.8.8 +short || echo "Dig failed!"
+        echo "--- Testing HTTP connection ---"
+        curl -I http://example.com || echo "Curl failed!"
+        echo "--- Network tests complete ---"
 
         export DISPLAY=:0
         export ROOT_XAUTHORITY=/root/.Xauthority
         touch "$ROOT_XAUTHORITY" || echo "Failed to touch $ROOT_XAUTHORITY"
         chmod 600 "$ROOT_XAUTHORITY"
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
-        COOKIE=$(mcookie) # This should work now as mcookie is part of util-linux
+        COOKIE=$(mcookie)
         echo "Generated cookie: $COOKIE"
         xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add localhost failed!"
 
@@ -134,7 +147,6 @@ jobs:
         chown $USER_NAME:$USER_NAME "$USER_HOME"
         echo "User Xauthority prepared at $USER_XAUTHORITY"
 
-        # Create and set XDG_RUNTIME_DIR
         XDG_RUNTIME_DIR=/run/user/$(id -u $USER_NAME)
         mkdir -p "$XDG_RUNTIME_DIR"
         chown $USER_NAME:$USER_NAME "$XDG_RUNTIME_DIR"
@@ -179,7 +191,10 @@ jobs:
 
         if [ $X_DIED -eq 1 ]; then
             echo "----- BEGIN /var/log/Xorg.0.log -----"
-            cat /var/log/Xorg.0.log || echo "Failed to cat Xorg log"
+            # Check for common input errors
+            grep -iE 'input|keyboard|evdev|libinput' /var/log/Xorg.0.log || echo "No specific input lines found in log."
+            echo "--- (Full log also available if needed) ---"
+            # cat /var/log/Xorg.0.log || echo "Failed to cat Xorg log"
             echo "----- END /var/log/Xorg.0.log -----"
         fi
 
@@ -226,7 +241,26 @@ jobs:
         echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image (ephemeral)."
         echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
         echo "VM console output will appear below:"
-        QEMU_ARGS=( -kernel "$KERNEL" -initrd "$INITRD" -drive "file=$FS,format=raw,if=virtio" -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init" -m 1G -cpu host -enable-kvm -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" -vga virtio -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" -serial stdio -device ac97 -device usb-ehci,id=ehci -device usb-tablet,bus=ehci.0 -netdev user,id=net0 -device e1000,netdev=net0 ) # No usb-kbd yet
+        # --- FIXED: Added usb-kbd back ---
+        QEMU_ARGS=(
+          -kernel "$KERNEL"
+          -initrd "$INITRD"
+          -drive "file=$FS,format=raw,if=virtio"
+          -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init"
+          -m 1G
+          -cpu host
+          -enable-kvm
+          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare"
+          -vga virtio
+          -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
+          -serial stdio
+          -device ac97
+          -device usb-ehci,id=ehci
+          -device usb-tablet,bus=ehci.0 # Keep tablet for mouse
+          -device usb-kbd,bus=ehci.0   # Add USB Keyboard back
+          -netdev user,id=net0
+          -device e1000,netdev=net0
+        )
         echo "Starting Qutebrowser VM..."; "$QEMU_BIN" "${QEMU_ARGS[@]}"; echo "QEMU exited."
         EOF
         chmod +x run-qutebrowser-vm.sh
