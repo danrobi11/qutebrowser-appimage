@@ -13,7 +13,7 @@ jobs:
     - name: Install Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname mcookie netbase isc-dhcp-client iproute2 ifupdown # Added network utils
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname # Added passwd & hostname
 
     - name: Create Minimal Ubuntu Chroot
       run: |
@@ -25,12 +25,12 @@ jobs:
 
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
-        apt-get install -y --no-install-recommends software-properties-common passwd hostname
+        # --- FIXED AGAIN: Removed mcookie from this install list ---
+        apt-get install -y --no-install-recommends software-properties-common passwd hostname # Ensure utils installed
         add-apt-repository universe -y
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
-        # --- FIXED: Added ifupdown and xserver-xorg-input-kbd ---
         apt-get install -y --no-install-recommends \
             qutebrowser \
             linux-generic \
@@ -51,7 +51,7 @@ jobs:
             netbase \
             isc-dhcp-client \
             iproute2 \
-            ifupdown # Provides ifup/ifdown commands
+            ifupdown
         echo "--- CHROOT: Main package installation complete ---"
 
         # Create non-root user
@@ -121,7 +121,7 @@ jobs:
         touch "$ROOT_XAUTHORITY" || echo "Failed to touch $ROOT_XAUTHORITY"
         chmod 600 "$ROOT_XAUTHORITY"
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
-        COOKIE=$(mcookie)
+        COOKIE=$(mcookie) # mcookie command is part of util-linux (already installed)
         echo "Generated cookie: $COOKIE"
         xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add localhost failed!"
 
