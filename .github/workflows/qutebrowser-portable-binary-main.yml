@@ -13,7 +13,7 @@ jobs:
     - name: Install Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname netbase isc-dhcp-client iproute2 ifupdown dnsutils curl # Added network utils
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname netbase isc-dhcp-client iproute2 ifupdown dnsutils curl
 
     - name: Create Minimal Ubuntu Chroot
       run: |
@@ -31,31 +31,8 @@ jobs:
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
-        # --- FIXED: Removed kbd driver, added network/dns utils ---
-        apt-get install -y --no-install-recommends \
-            qutebrowser \
-            linux-generic \
-            initramfs-tools \
-            xserver-xorg-core \
-            xinit \
-            xterm \
-            mesa-utils \
-            libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
-            libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 \
-            libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 \
-            libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 \
-            xauth fonts-dejavu-core \
-            xserver-xorg-input-libinput \
-            # xserver-xorg-input-kbd # REMOVED - libinput handles USB kbd
-            x11-utils \
-            sudo \
-            netbase \
-            isc-dhcp-client \
-            iproute2 \
-            ifupdown \
-            libx11-xcb1 libfontconfig1 \
-            dnsutils \
-            curl
+        # --- FIXED: Put all packages on one line ---
+        apt-get install -y --no-install-recommends qutebrowser linux-generic initramfs-tools xserver-xorg-core xinit xterm mesa-utils libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 xauth fonts-dejavu-core xserver-xorg-input-libinput x11-utils sudo netbase isc-dhcp-client iproute2 ifupdown libx11-xcb1 libfontconfig1 dnsutils curl
         echo "--- CHROOT: Main package installation complete ---"
 
         # Create non-root user
@@ -97,7 +74,7 @@ jobs:
 
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
 
-        # --- FIXED Startup script: Enhanced Xorg log check ---
+        # Startup script
         sudo bash -c "cat > chroot/sbin/qute_init" << 'EOF'
         #!/bin/bash
         echo "--- Running Init Script ---"
@@ -191,10 +168,8 @@ jobs:
 
         if [ $X_DIED -eq 1 ]; then
             echo "----- BEGIN /var/log/Xorg.0.log -----"
-            # Check for common input errors
             grep -iE 'input|keyboard|evdev|libinput' /var/log/Xorg.0.log || echo "No specific input lines found in log."
             echo "--- (Full log also available if needed) ---"
-            # cat /var/log/Xorg.0.log || echo "Failed to cat Xorg log"
             echo "----- END /var/log/Xorg.0.log -----"
         fi
 
@@ -241,26 +216,7 @@ jobs:
         echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image (ephemeral)."
         echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
         echo "VM console output will appear below:"
-        # --- FIXED: Added usb-kbd back ---
-        QEMU_ARGS=(
-          -kernel "$KERNEL"
-          -initrd "$INITRD"
-          -drive "file=$FS,format=raw,if=virtio"
-          -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init"
-          -m 1G
-          -cpu host
-          -enable-kvm
-          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare"
-          -vga virtio
-          -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
-          -serial stdio
-          -device ac97
-          -device usb-ehci,id=ehci
-          -device usb-tablet,bus=ehci.0 # Keep tablet for mouse
-          -device usb-kbd,bus=ehci.0   # Add USB Keyboard back
-          -netdev user,id=net0
-          -device e1000,netdev=net0
-        )
+        QEMU_ARGS=( -kernel "$KERNEL" -initrd "$INITRD" -drive "file=$FS,format=raw,if=virtio" -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init" -m 1G -cpu host -enable-kvm -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" -vga virtio -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" -serial stdio -device ac97 -device usb-ehci,id=ehci -device usb-tablet,bus=ehci.0 -device usb-kbd,bus=ehci.0 -netdev user,id=net0 -device e1000,netdev=net0 )
         echo "Starting Qutebrowser VM..."; "$QEMU_BIN" "${QEMU_ARGS[@]}"; echo "QEMU exited."
         EOF
         chmod +x run-qutebrowser-vm.sh
