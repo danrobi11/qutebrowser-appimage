@@ -13,7 +13,7 @@ jobs:
     - name: Install Tools
       run: |
         sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname # Added passwd & hostname
+        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname mcookie netbase isc-dhcp-client iproute2 ifupdown # Added network utils
 
     - name: Create Minimal Ubuntu Chroot
       run: |
@@ -25,12 +25,12 @@ jobs:
 
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
-        # --- FIXED: Removed mcookie from this install list ---
-        apt-get install -y --no-install-recommends software-properties-common passwd hostname # Ensure utils installed
+        apt-get install -y --no-install-recommends software-properties-common passwd hostname
         add-apt-repository universe -y
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
+        # --- FIXED: Added ifupdown and xserver-xorg-input-kbd ---
         apt-get install -y --no-install-recommends \
             qutebrowser \
             linux-generic \
@@ -45,11 +45,13 @@ jobs:
             libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 \
             xauth fonts-dejavu-core \
             xserver-xorg-input-libinput \
+            xserver-xorg-input-kbd \
             x11-utils \
             sudo \
             netbase \
             isc-dhcp-client \
-            iproute2
+            iproute2 \
+            ifupdown # Provides ifup/ifdown commands
         echo "--- CHROOT: Main package installation complete ---"
 
         # Create non-root user
@@ -119,7 +121,7 @@ jobs:
         touch "$ROOT_XAUTHORITY" || echo "Failed to touch $ROOT_XAUTHORITY"
         chmod 600 "$ROOT_XAUTHORITY"
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
-        COOKIE=$(mcookie) # Should work now as mcookie is part of util-linux
+        COOKIE=$(mcookie)
         echo "Generated cookie: $COOKIE"
         xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add localhost failed!"
 
@@ -211,7 +213,7 @@ jobs:
         echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image (ephemeral)."
         echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
         echo "VM console output will appear below:"
-        QEMU_ARGS=( -kernel "$KERNEL" -initrd "$INITRD" -drive "file=$FS,format=raw,if=virtio" -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init" -m 1G -cpu host -enable-kvm -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" -vga virtio -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" -serial stdio -device ac97 -device usb-ehci,id=ehci -device usb-tablet,bus=ehci.0 ) # Removed usb-kbd
+        QEMU_ARGS=( -kernel "$KERNEL" -initrd "$INITRD" -drive "file=$FS,format=raw,if=virtio" -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init" -m 1G -cpu host -enable-kvm -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" -vga virtio -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" -serial stdio -device ac97 -device usb-ehci,id=ehci -device usb-tablet,bus=ehci.0 -netdev user,id=net0 -device e1000,netdev=net0 ) # No usb-kbd yet
         echo "Starting Qutebrowser VM..."; "$QEMU_BIN" "${QEMU_ARGS[@]}"; echo "QEMU exited."
         EOF
         chmod +x run-qutebrowser-vm.sh
