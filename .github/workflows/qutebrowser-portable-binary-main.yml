@@ -84,8 +84,8 @@ jobs:
         hostname qutebrowser-vm || echo "hostname command failed"
         echo "Hostname set to: $(hostname)"
         echo "Mounting pseudo-filesystems (/proc, /sys, /dev/pts)..."
-        mount -t proc proc /proc || { echo "Mount /proc failed! Exiting."; exit 1; }
-        mount -t sysfs sysfs /sys || { echo "Mount /sys failed! Exiting."; exit 1; }
+        mount -t proc proc /proc || echo "Mount /proc failed"
+        mount -t sysfs sysfs /sys || echo "Mount /sys failed"
         mkdir -p /dev/pts
         mount -t devpts devpts /dev/pts || echo "Mount /dev/pts failed"
         echo "Mounting /dev/shm..."
@@ -216,7 +216,7 @@ jobs:
         [ -f "$KERNEL" ] && [ -f "$INITRD" ] && [ -f "$FS" ] || { echo "Error: Missing VM components in $SCRIPT_DIR."; exit 1; }
         HOST_SHARE="$HOME"; GUEST_MOUNT="/mnt/host"
         echo "Sharing $HOST_SHARE at $GUEST_MOUNT"; echo "Use: file://$GUEST_MOUNT/..."
-        echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image    image (ephemeral)."
+        echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image (ephemeral)."
         echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
         echo "VM console output will appear below:"
         QEMU_ARGS=( -kernel "$KERNEL" -initrd "$INITRD" -drive "file=$FS,format=raw,if=virtio" -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init" -m 1G -cpu host -enable-kvm -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare" -vga virtio -spice "port=5900,addr=127.0.0.1,disable-ticketing=on" -serial stdio -device ac97 -device usb-ehci,id=ehci -device usb-tablet,bus=ehci.0 -device usb-kbd,bus=ehci.0 -netdev user,id=net0 -device e1000,netdev=net0 )
