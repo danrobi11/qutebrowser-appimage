@@ -36,8 +36,11 @@ jobs:
         # Trim unused kernel modules and dependencies
         echo "--- CHROOT: Trimming unused kernel modules and dependencies ---"
         apt-get autoremove -y
-        find /lib/modules -name "*.ko" -type f | grep -v -e virtio -e 9p -e e1000 -e usb -e input -e evdev -e snd -e drm -e i915 -e xhci -e ehci -e hid | xargs rm -f
-        depmod -a
+        KERNEL_VERSION=$(ls /boot/vmlinuz-* | sed "s|.*/vmlinuz-||")
+        echo "Detected kernel version: $KERNEL_VERSION"
+        depmod -a "$KERNEL_VERSION"
+        find /lib/modules/"$KERNEL_VERSION" -name "*.ko" -type f | grep -v -e virtio -e 9p -e e1000 -e usb -e input -e evdev -e snd -e drm -e i915 -e xhci -e ehci -e hid | xargs rm -f
+        depmod -a "$KERNEL_VERSION"
         echo "--- CHROOT: Trimming complete ---"
 
         echo "--- CHROOT: Creating user quteuser ---"
