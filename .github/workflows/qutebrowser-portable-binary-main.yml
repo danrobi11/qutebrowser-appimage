@@ -26,51 +26,37 @@ jobs:
         echo "--- CHROOT: Updating apt lists (1st time) ---"
         apt-get update
         # --- NOTE TO AI/EDITOR: DO NOT ADD mcookie HERE! It is part of util-linux ---
+        echo "--- CHROOT: Installing base utils ---"
         apt-get install -y --no-install-recommends software-properties-common passwd hostname
+
+        echo "--- CHROOT: Adding universe repository ---"
         add-apt-repository universe -y
+
+        echo "--- CHROOT: Updating apt lists (2nd time) ---"
         apt-get update
 
-        echo "--- CHROOT: Installing main packages ---"
-        # --- FIXED: Reverted to multi-line apt-get install with backslashes ---
-        apt-get install -y --no-install-recommends \
-            qutebrowser \
-            linux-generic \
-            initramfs-tools \
-            xserver-xorg-core \
-            xinit \
-            xterm \
-            mesa-utils \
-            libxcb1 \
-            libxcb-glx0 \
-            libxcb-icccm4 \
-            libxcb-image0 \
-            libxcb-keysyms1 \
-            libxcb-randr0 \
-            libxcb-render-util0 \
-            libxcb-render0 \
-            libxcb-shape0 \
-            libxcb-shm0 \
-            libxcb-sync1 \
-            libxcb-util1 \
-            libxcb-xfixes0 \
-            libxcb-xinerama0 \
-            libxcb-xkb1 \
-            libxkbcommon-x11-0 \
-            xauth \
-            fonts-dejavu-core \
-            xserver-xorg-input-libinput \
-            # xserver-xorg-input-kbd is removed
-            x11-utils \
-            sudo \
-            netbase \
-            isc-dhcp-client \
-            iproute2 \
-            ifupdown \
-            libx11-xcb1 \
-            libfontconfig1 \
-            dnsutils \
-            curl
-        echo "--- CHROOT: Main package installation complete ---"
+        echo "--- CHROOT: Installing Qutebrowser ---"
+        apt-get install -y --no-install-recommends qutebrowser
+
+        echo "--- CHROOT: Installing Kernel and Boot utils ---"
+        apt-get install -y --no-install-recommends linux-generic initramfs-tools
+
+        echo "--- CHROOT: Installing Xorg Core/Base ---"
+        apt-get install -y --no-install-recommends xserver-xorg-core xinit xterm mesa-utils
+
+        echo "--- CHROOT: Installing Xorg Input driver ---"
+        apt-get install -y --no-install-recommends xserver-xorg-input-libinput
+
+        echo "--- CHROOT: Installing XCB/X11 runtime libraries ---"
+        apt-get install -y --no-install-recommends libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libx11-xcb1 libfontconfig1
+
+        echo "--- CHROOT: Installing Xorg Auth/Utils/Fonts ---"
+        apt-get install -y --no-install-recommends xauth fonts-dejavu-core x11-utils
+
+        echo "--- CHROOT: Installing Networking utils ---"
+        apt-get install -y --no-install-recommends sudo netbase isc-dhcp-client iproute2 ifupdown dnsutils curl
+
+        echo "--- CHROOT: Package installation complete ---"
 
         # Create non-root user
         echo "--- CHROOT: Creating user quteuser ---"
@@ -90,6 +76,7 @@ jobs:
         echo "--- CHROOT: Verifying /boot contents ---"
         ls -l /boot || echo "/boot not found or ls failed"
         rm -f /etc/X11/xorg.conf
+        rm -f /etc/X11/xorg.conf.d/10-keyboard.conf # Ensure no leftover kbd config
 
         # Configure network
         echo "--- CHROOT: Configuring network interface ens6 ---"
@@ -104,10 +91,6 @@ jobs:
         nameserver 1.1.1.1
         nameserver 8.8.4.4
         EOF_DNS
-
-        # Remove explicit keyboard config
-        echo "--- CHROOT: Removing keyboard xorg config ---"
-        rm -f /etc/X11/xorg.conf.d/10-keyboard.conf
 
         echo "--- CHROOT: Cleaning apt cache ---"
         apt-get clean
@@ -139,16 +122,14 @@ jobs:
         sleep 3
         echo "--- Network status ---"
         ip addr show ens6 || echo "ip addr show ens6 failed"
-        # echo "--- Testing IP connectivity ---"; ping -c 1 8.8.8.8 || echo "Ping failed!"
-        # echo "--- Testing DNS resolution ---"; dig qutebrowser.org @8.8.8.8 +short || echo "Dig failed!"
-        # echo "--- Testing HTTP connection ---"; curl -I http://example.com || echo "Curl failed!"
-        # echo "--- Network tests complete ---"
+        echo "--- Network tests complete ---"
 
         export DISPLAY=:0
         export ROOT_XAUTHORITY=/root/.Xauthority
         touch "$ROOT_XAUTHORITY" || echo "Failed to touch $ROOT_XAUTHORITY"
         chmod 600 "$ROOT_XAUTHORITY"
         if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
+        if ! command -v mcookie > /dev/null; then echo "mcookie command not found! Is util-linux installed?"; fi
         COOKIE=$(mcookie)
         echo "Generated cookie: $COOKIE"
         xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add localhost failed!"
@@ -208,7 +189,6 @@ jobs:
             echo "----- BEGIN /var/log/Xorg.0.log -----"
             grep -iE 'input|keyboard|evdev|libinput|kbd' /var/log/Xorg.0.log || echo "No specific input lines found in log."
             echo "--- (Full log also available if needed) ---"
-            # cat /var/log/Xorg.0.log || echo "Failed to cat Xorg log"
             echo "----- END /var/log/Xorg.0.log -----"
         fi
 
