@@ -31,7 +31,7 @@ jobs:
         apt-get update
 
         echo "--- CHROOT: Installing main packages ---"
-        # --- FIXED: Rely ONLY on libinput, remove kbd driver ---
+        # --- FIXED: Reverted to multi-line apt-get install with backslashes ---
         apt-get install -y --no-install-recommends \
             qutebrowser \
             linux-generic \
@@ -40,20 +40,34 @@ jobs:
             xinit \
             xterm \
             mesa-utils \
-            libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
-            libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 \
-            libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 \
-            libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 \
-            xauth fonts-dejavu-core \
+            libxcb1 \
+            libxcb-glx0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-render0 \
+            libxcb-shape0 \
+            libxcb-shm0 \
+            libxcb-sync1 \
+            libxcb-util1 \
+            libxcb-xfixes0 \
+            libxcb-xinerama0 \
+            libxcb-xkb1 \
+            libxkbcommon-x11-0 \
+            xauth \
+            fonts-dejavu-core \
             xserver-xorg-input-libinput \
-            # xserver-xorg-input-kbd # REMOVED
+            # xserver-xorg-input-kbd is removed
             x11-utils \
             sudo \
             netbase \
             isc-dhcp-client \
             iproute2 \
             ifupdown \
-            libx11-xcb1 libfontconfig1 \
+            libx11-xcb1 \
+            libfontconfig1 \
             dnsutils \
             curl
         echo "--- CHROOT: Main package installation complete ---"
@@ -68,7 +82,6 @@ jobs:
         echo "virtio_pci" >> /etc/initramfs-tools/modules; echo "virtio_gpu" >> /etc/initramfs-tools/modules
         echo "9p" >> /etc/initramfs-tools/modules; echo "9pnet_virtio" >> /etc/initramfs-tools/modules
         echo "e1000" >> /etc/initramfs-tools/modules
-        # No need for atkbd/psmouse if we force USB
 
         echo "--- CHROOT: Generating initramfs ---"
         update-initramfs -u -k all
@@ -92,10 +105,9 @@ jobs:
         nameserver 8.8.4.4
         EOF_DNS
 
-        # --- FIXED: Remove explicit keyboard config ---
+        # Remove explicit keyboard config
         echo "--- CHROOT: Removing keyboard xorg config ---"
         rm -f /etc/X11/xorg.conf.d/10-keyboard.conf
-        # --- End Fix ---
 
         echo "--- CHROOT: Cleaning apt cache ---"
         apt-get clean
@@ -103,7 +115,7 @@ jobs:
 
         sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
 
-        # --- FIXED Startup script: Enhanced Xorg log check ---
+        # Startup script
         sudo bash -c "cat > chroot/sbin/qute_init" << 'EOF'
         #!/bin/bash
         echo "--- Running Init Script ---"
@@ -127,7 +139,7 @@ jobs:
         sleep 3
         echo "--- Network status ---"
         ip addr show ens6 || echo "ip addr show ens6 failed"
-        # echo "--- Testing IP connectivity ---"; ping -c 1 8.8.8.8 || echo "Ping failed!" # Comment out tests for now
+        # echo "--- Testing IP connectivity ---"; ping -c 1 8.8.8.8 || echo "Ping failed!"
         # echo "--- Testing DNS resolution ---"; dig qutebrowser.org @8.8.8.8 +short || echo "Dig failed!"
         # echo "--- Testing HTTP connection ---"; curl -I http://example.com || echo "Curl failed!"
         # echo "--- Network tests complete ---"
