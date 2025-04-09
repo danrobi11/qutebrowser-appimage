@@ -56,7 +56,7 @@ jobs:
           git checkout v3.2.0
           python3 -m venv "$WORKDIR/venv"
           source "$WORKDIR/venv/bin/activate"
-          pip install setuptools reveal
+          pip install setuptools wheel
           pip install -r requirements.txt -r misc/requirements/requirements-pyqt.txt
           pip install . --prefix="$HOME/qutebrowser-portable" --no-deps
           deactivate
@@ -86,7 +86,6 @@ jobs:
             echo "Error: PyQt6 QtCore module not found at $PYQT6_MOD"
             exit 1
           fi
-          # Additional Qt6 and related libs
           cp /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libicu* "$HOME/qutebrowser-portable/lib/" || true
