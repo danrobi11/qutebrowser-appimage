@@ -38,7 +38,7 @@ jobs:
       - name: Build portable qutebrowser
         run: |
           # Set up directories
-          mkdir -p qutebrowser-portable/bin qutebrowser-portable/lib qutebrowser-portable/share
+          mkdir -p qutebrowser-portable/bin qutebrowser-portable/lib
           WORKDIR="$HOME/qutebrowser-portable-build"
           mkdir -p "$WORKDIR"
           
@@ -77,17 +77,6 @@ jobs:
           exec "$DIR/bin/python3" "$DIR/bin/qutebrowser"
           EOF
           chmod +x "$HOME/qutebrowser-portable/run.sh"
-
-          # Add icon and desktop file (optional, for convenience)
-          cp "$WORKDIR/qutebrowser-source/qutebrowser/icons/qutebrowser-64x64.png" "$HOME/qutebrowser-portable/qutebrowser.png"
-          cat << "EOF" > "$HOME/qutebrowser-portable/qutebrowser.desktop"
-          [Desktop Entry]
-          Name=Qutebrowser
-          Exec=./run.sh
-          Type=Application
-          Icon=qutebrowser
-          Categories=Network;WebBrowser;
-          EOF
 
       - name: Package and upload artifact
         run: |
