@@ -18,7 +18,7 @@ jobs:
       - name: Set up build environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git python3 python3-pip python3-venv wget patchelf libqt6core6
+          sudo apt-get install -y build-essential git python3 python3-pip python3-venv wget patchelf libqt6core6 libpulse0 libasound2
           mkdir -p ~/qutebrowser-portable-build
 
       - name: Determine Python version and verify lib-dynload
@@ -90,6 +90,7 @@ jobs:
           cp -L /usr/lib/x86_64-linux-gnu/libX11.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libX11.so.6"; exit 1; }
           cp -L /usr/lib/x86_64-linux-gnu/libxkbcommon* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy xkbcommon libraries"; exit 1; }
           cp -L /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libpulse.so.0"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libasound.so.2 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libasound.so.2"; exit 1; }
           cp -L /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libnss3.so"; exit 1; }
           cp -L /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libgbm.so.1"; exit 1; }
           cp -L /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libdouble-conversion.so.3"; exit 1; }
@@ -103,6 +104,8 @@ jobs:
 
           echo "Listing Qt6 libraries in $HOME/qutebrowser-portable/lib:"
           ls -l "$HOME/qutebrowser-portable/lib/libQt6Core.so"* || echo "No libQt6Core.so files found"
+          echo "Listing audio libraries in $HOME/qutebrowser-portable/lib:"
+          ls -l "$HOME/qutebrowser-portable/lib/libpulse.so"* "$HOME/qutebrowser-portable/lib/libasound.so"* || echo "No audio libraries found"
 
           patchelf --set-rpath '$ORIGIN/../lib' "$HOME/qutebrowser-portable/bin/python3"
           find "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6" -name '*.so' -exec patchelf --set-rpath '$ORIGIN/../../../../lib' {} \;
