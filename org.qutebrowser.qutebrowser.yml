@@ -18,10 +18,41 @@ build-options:
   cxxflags: "-O2 -pipe"
 
 modules:
+  # Dependency: Jinja2
+  - name: python-jinja2
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=${FLATPAK_DEST} Jinja2
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/7a/ff/75c28576a1d900e87eb6335b063fab47a8ef3c8b4d88524c4bf78f670cce/Jinja2-3.1.2.tar.gz
+        sha256: 31351a702a408a9e7595a8fc6150fc3f43bb6bf7e319770cbc0db9df9437e852
+
+  # Dependency: PyYAML
+  - name: python-pyyaml
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=${FLATPAK_DEST} PyYAML
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/36/2b/61d51a2c4f25ef062ae3f74576b01638bebad5e045f747ff12643df63844/PyYAML-6.0.tar.gz
+        sha256: 68fb519c14306fec9720a2a5b45bc9f0c8d1b9c72adf45c37baedfcd949c35a2
+
+  # Dependency: PyQt6 (core requirement for qutebrowser 3.2.0)
+  - name: python-pyqt6
+    buildsystem: simple
+    build-commands:
+      - pip3 install --prefix=${FLATPAK_DEST} PyQt6
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/eb/5e/1e4dcfc1eceb61e82ab8f996b9fa14f31cffe2a1e14c614f1f7d68da2e39/PyQt6-6.6.1.tar.gz
+        sha256: 9f9423a02e2607f65e9362e8017e4988b3f875e2f519e8d8eb966d5e4c003e31
+
+  # Main qutebrowser module
   - name: qutebrowser
     buildsystem: simple
     build-commands:
-      - pip3 install --prefix=${FLATPAK_DEST} .
+      - pip3 install --prefix=${FLATPAK_DEST} --no-deps .
       - install -Dm755 /app/bin/qutebrowser -t ${FLATPAK_DEST}/bin/
       - install -Dm644 misc/org.qutebrowser.qutebrowser.desktop -t ${FLATPAK_DEST}/share/applications/
       - install -Dm644 misc/org.qutebrowser.qutebrowser.appdata.xml -t ${FLATPAK_DEST}/share/metainfo/
@@ -35,6 +66,7 @@ modules:
       - /share/doc
       - /share/man
 
+  # Optional: pdf.js for PDF support
   - name: pdfjs
     buildsystem: simple
     build-commands:
