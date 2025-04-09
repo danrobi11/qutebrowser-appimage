@@ -114,8 +114,8 @@ jobs:
           cp -r /usr/lib/x86_64-linux-gnu/qt6/plugins/* "$HOME/qutebrowser-portable/Qt/plugins/" || { echo "Failed to copy Qt6 plugins"; exit 1; }
           # Adjusted path for Qt6 libexec files
           echo "Checking Qt6 libexec source directory:"
-          ls -l /usr/libexec/ || echo "No /usr/libexec/ directory found"
-          cp -r /usr/libexec/QtWebEngineProcess "$HOME/qutebrowser-portable/Qt/libexec/" || { echo "Failed to copy Qt6 libexec"; exit 1; }
+          ls -l /usr/lib/qt6/libexec/ || echo "No /usr/lib/qt6/libexec/ directory found"
+          cp -r /usr/lib/qt6/libexec/QtWebEngineProcess "$HOME/qutebrowser-portable/Qt/libexec/" || { echo "Failed to copy Qt6 libexec"; exit 1; }
 
           echo "Listing Qt6 libraries in $HOME/qutebrowser-portable/lib:"
           ls -l "$HOME/qutebrowser-portable/lib/libQt6Core.so"* || echo "No libQt6Core.so files found"
