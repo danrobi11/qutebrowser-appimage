@@ -38,30 +38,18 @@ jobs:
           PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
           echo "PYTHON_VERSION=$PYTHON_VERSION" >> $GITHUB_ENV
 
-      - name: Run build script with additional library bundling and fixes
+      - name: Run build script with additional library bundling and log fix
         run: |
           chmod +x qutebrowser-appimage.sh
           sed -i "s|python3.13|python${{ env.PYTHON_VERSION }}|g" qutebrowser-appimage.sh
-          # Add bundling for libpulse.so.0 and libxcb-cursor.so.0
+          # Add bundling for libpulse.so.0, libxcb-cursor.so.0, and glibc
           sed -i '/Bundling additional non-Qt libraries/a cp /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$APPDIR/usr/lib/" || { echo "Failed to copy libpulse.so.0"; exit 1; }' qutebrowser-appimage.sh
           sed -i '/Bundling additional non-Qt libraries/a cp /usr/lib/x86_64-linux-gnu/libxcb-cursor.so.0 "$APPDIR/usr/lib/" || { echo "Failed to copy libxcb-cursor.so.0"; exit 1; }' qutebrowser-appimage.sh
-          # Bundle glibc components
           sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/libc.so.6 "$APPDIR/usr/lib/" || { echo "Failed to copy libc.so.6"; exit 1; }' qutebrowser-appimage.sh
           sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$APPDIR/usr/lib/" || { echo "Failed to copy ld-linux-x86-64.so.2"; exit 1; }' qutebrowser-appimage.sh
-          # Fix AppRun log path to use $HOME dynamically, targeting only the AppRun section
-          sed -i '/echo "Creating AppRun with debug logging"/,/chmod +x "$APPDIR\/AppRun"/c \
-          echo "Creating AppRun with debug logging..."; \
-          cat << EOF > "$APPDIR/AppRun"; \
-          #!/bin/bash; \
-          HERE="\$(dirname "\$(readlink -f "\${0}")")"; \
-          export PYTHONPATH="\$HERE/usr/lib/python${{ env.PYTHON_VERSION }}/site-packages:\$PYTHONPATH"; \
-          export LD_LIBRARY_PATH="\$HERE/usr/lib:\$HERE/usr/plugins:\$LD_LIBRARY_PATH"; \
-          export QT_PLUGIN_PATH="\$HERE/usr/plugins"; \
-          export QT_DEBUG_PLUGINS=1; \
-          export QUTE_DEBUG=1; \
-          exec "\$HERE/usr/bin/python3" "\$HERE/usr/bin/qutebrowser" --debug > "\$HOME/qutebrowser-appimage-run.log" 2>&1; \
-          EOF; \
-          chmod +x "$APPDIR/AppRun"' qutebrowser-appimage.sh
+          # Fix AppRun to use $HOME dynamically at runtime, targeting the exact exec line
+          sed -i '/exec "\$HERE\/usr\/bin\/python3" "\$HERE\/usr\/bin\/qutebrowser" --debug/c \
+          exec "\$HERE/usr/bin/python3" "\$HERE/usr/bin/qutebrowser" --debug > "\$HOME/qutebrowser-appimage-run.log" 2>&1' qutebrowser-appimage.sh
           ./qutebrowser-appimage.sh
 
       - name: Upload AppImage artifact
