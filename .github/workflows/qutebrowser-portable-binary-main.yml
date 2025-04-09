@@ -18,7 +18,7 @@ jobs:
       - name: Set up build environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential git python3 python3-pip python3-venv wget patchelf
+          sudo apt-get install -y build-essential git python3 python3-pip python3-venv wget patchelf libqt6core6
           mkdir -p ~/qutebrowser-portable-build
 
       - name: Determine Python version and verify lib-dynload
@@ -61,47 +61,46 @@ jobs:
           cp -L /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
           cp -L /lib64/ld-linux-x86-64.so.2 "$HOME/qutebrowser-portable/lib/"
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
-            cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+            cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy $lib"; exit 1; }
           done
-          cp -L /usr/lib/x86_64-linux-gnu/libm.so.6 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libm.so.6"
-          cp -L /usr/lib/x86_64-linux-gnu/libz.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libz.so.1"
-          cp -L /usr/lib/x86_64-linux-gnu/libexpat.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libexpat.so.1"
-          cp -L /lib/x86_64-linux-gnu/libbz2.so.1.0 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libbz2.so.1.0"
-          cp -L /usr/lib/x86_64-linux-gnu/liblzma.so.5 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy liblzma.so.5"
+          cp -L /usr/lib/x86_64-linux-gnu/libm.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libm.so.6"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libz.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libz.so.1"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libexpat.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libexpat.so.1"; exit 1; }
+          cp -L /lib/x86_64-linux-gnu/libbz2.so.1.0 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libbz2.so.1.0"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/liblzma.so.5 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy liblzma.so.5"; exit 1; }
 
           PYQT6_MOD="$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6/QtCore.abi3.so"
           if [ -f "$PYQT6_MOD" ]; then
             for lib in $(ldd "$PYQT6_MOD" | grep -o '/usr/lib/[^ ]*' | sort -u); do
-              cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+              cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy $lib"; exit 1; }
             done
             QT6_CORE="/usr/lib/x86_64-linux-gnu/libQt6Core.so.6"
             for lib in $(ldd "$QT6_CORE" | grep -o '/usr/lib/[^ ]*' | sort -u); do
-              cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+              cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy $lib"; exit 1; }
             done
           else
             echo "Error: PyQt6 QtCore module not found at $PYQT6_MOD"
             exit 1
           fi
-          cp -L /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libicu* "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libfreetype.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libX11.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libxkbcommon* "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3 "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libstdc++.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libicui18n.so.* "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libicuuc.so.* "$HOME/qutebrowser-portable/lib/" || true
-          cp -L /usr/lib/x86_64-linux-gnu/libb2.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libb2.so.1"
-          cp -r /usr/lib/x86_64-linux-gnu/qt6/plugins/* "$HOME/qutebrowser-portable/Qt/plugins/" || true
-          cp -r /usr/lib/x86_64-linux-gnu/qt6/libexec/* "$HOME/qutebrowser-portable/Qt/libexec/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy Qt6 libraries"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy xcb libraries"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libicu* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icu libraries"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libfontconfig.so.1"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libfreetype.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libfreetype.so.6"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libX11.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libX11.so.6"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libxkbcommon* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy xkbcommon libraries"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libpulse.so.0"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libnss3.so"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libgbm.so.1"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libdouble-conversion.so.3"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libstdc++.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libstdc++.so.6"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libglib-2.0.so.0"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libicui18n.so.* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icui18n libraries"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libicuuc.so.* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icuuc libraries"; exit 1; }
+          cp -L /usr/lib/x86_64-linux-gnu/libb2.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libb2.so.1"; exit 1; }
+          cp -r /usr/lib/x86_64-linux-gnu/qt6/plugins/* "$HOME/qutebrowser-portable/Qt/plugins/" || { echo "Failed to copy Qt6 plugins"; exit 1; }
+          cp -r /usr/lib/x86_64-linux-gnu/qt6/libexec/* "$HOME/qutebrowser-portable/Qt/libexec/" || { echo "Failed to copy Qt6 libexec"; exit 1; }
 
-          # Debug: Verify Qt6 libraries
           echo "Listing Qt6 libraries in $HOME/qutebrowser-portable/lib:"
           ls -l "$HOME/qutebrowser-portable/lib/libQt6Core.so"* || echo "No libQt6Core.so files found"
 
