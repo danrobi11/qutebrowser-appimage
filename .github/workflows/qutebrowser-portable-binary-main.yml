@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install system dependencies including FUSE and PC/SC
+      - name: Install system dependencies including FUSE, PC/SC, and PulseAudio
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -28,7 +28,7 @@ jobs:
             libfuse3-dev libfuse3-3 wget fuse libfuse2 \
             libmysqlclient-dev libqt63drender6 libqt6webview6 libqt63dquickscene2d6 \
             libgl1 libegl1 libopengl0 libglx0 libx11-xcb1 libxcb-glx0 libgbm1 libdrm2 libxcb-dri3-0 libxshmfence1 \
-            libpcsclite1
+            libpcsclite1 libpulse0
           # Ensure FUSE is loaded
           sudo modprobe fuse || echo "FUSE module not available, continuing without it"
 
@@ -42,8 +42,8 @@ jobs:
         run: |
           chmod +x qutebrowser-appimage.sh
           sed -i "s|python3.13|python${{ env.PYTHON_VERSION }}|g" qutebrowser-appimage.sh
-          # Add libpcsclite.so.1 bundling before running linuxdeployqt
-          sed -i '/Bundling additional non-Qt libraries/a cp /usr/lib/x86_64-linux-gnu/libpcsclite.so.1 "$APPDIR/usr/lib/" || { echo "Failed to copy libpcsclite.so.1"; exit 1; }' qutebrowser-appimage.sh
+          # Add libpulse.so.0 bundling before running linuxdeployqt
+          sed -i '/Bundling additional non-Qt libraries/a cp /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$APPDIR/usr/lib/" || { echo "Failed to copy libpulse.so.0"; exit 1; }' qutebrowser-appimage.sh
           ./qutebrowser-appimage.sh
 
       - name: Upload AppImage artifact
