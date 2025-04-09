@@ -24,8 +24,16 @@ jobs:
 
       - name: Download and extract Qt 6.7.0
         run: |
-          wget -q https://download.qt.io/official_releases/qt/6.7/6.7.0/single/qt-everywhere-src-6.7.0.tar.xz
+          wget -q https://download.qt.io/official_releases/qt/6.7/6.7.0/single/qt-everywhere-src-6.7.0.tar.xz -O qt-everywhere-src-6.7.0.tar.xz
+          if [ ! -f qt-everywhere-src-6.7.0.tar.xz ]; then
+            echo "Error: Qt 6.7.0 tarball download failed"
+            exit 1
+          fi
           tar -xf qt-everywhere-src-6.7.0.tar.xz -C ~/qutebrowser-portable-build
+          if [ ! -d ~/qutebrowser-portable-build/qt-everywhere-src-6.7.0 ]; then
+            echo "Error: Qt 6.7.0 extraction failed"
+            exit 1
+          fi
           QT_DIR="$HOME/qutebrowser-portable-build/qt-everywhere-src-6.7.0"
           echo "QT_DIR=$QT_DIR" >> $GITHUB_ENV
 
