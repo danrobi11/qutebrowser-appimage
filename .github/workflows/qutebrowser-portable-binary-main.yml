@@ -29,11 +29,20 @@ jobs:
             libgl1 libegl1 libopengl0 libglx0 libx11-xcb1 libxcb-glx0 libgbm1 libdrm2 libxcb-dri3-0 libxshmfence1 \
             libpcsclite1 libpulse0 libxcb-cursor0 wget
 
-      - name: Determine Python version
+      - name: Determine Python version and verify lib-dynload
         id: python-version
         run: |
           PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
           echo "PYTHON_VERSION=$PYTHON_VERSION" >> $GITHUB_ENV
+          SYSTEM_LIB_DYNLOAD="/usr/lib/python${PYTHON_VERSION}/lib-dynload"
+          if [ -d "$SYSTEM_LIB_DYNLOAD" ]; then
+            echo "System lib-dynload found at $SYSTEM_LIB_DYNLOAD"
+          else
+            echo "Error: System lib-dynload not found at $SYSTEM_LIB_DYNLOAD"
+            echo "System Python structure:"
+            find "/usr/lib/python${PYTHON_VERSION}" -type d
+            exit 1
+          fi
 
       - name: Build portable qutebrowser
         run: |
@@ -59,14 +68,9 @@ jobs:
           mkdir -p "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
           cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/site-packages" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
           cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}"/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-          # Handle lib-dynload location dynamically
-          if [ -d "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" ]; then
-            cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-          elif [ -d "$WORKDIR/venv/lib/lib-dynload" ]; then
-            cp -r "$WORKDIR/venv/lib/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-          else
-            echo "Error: lib-dynload not found in expected locations" && exit 1
-          fi
+          # Copy lib-dynload from system Python
+          cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
+          echo "Copied lib-dynload from /usr/lib/python${{ env.PYTHON_VERSION }}/lib-dynload"
 
           # Bundle glibc and core libs with stricter dependency matching
           PYTHON_BIN="$HOME/qutebrowser-portable/bin/python3"
@@ -75,7 +79,6 @@ jobs:
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
             cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
           done
-          # Bundle Qt and other runtime libs explicitly tied to Python and qutebrowser
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*libQt6[^ ]*' | sort -u); do
             cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
           done
