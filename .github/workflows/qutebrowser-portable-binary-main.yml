@@ -1,4 +1,4 @@
-name: Build qutebrowser AppImage
+name: Build qutebrowser Portable Binary
 
 on:
   push:
@@ -25,11 +25,9 @@ jobs:
             libfontconfig1-dev libfreetype-dev libasound2-dev libnss3-dev libglib2.0-dev \
             libpcre2-dev libjpeg-dev libpng-dev libicu-dev libxslt1-dev \
             python3-pyqt6 python3-pyqt6.qtsvg python3-pyqt6.qtwebengine \
-            libfuse3-dev libfuse3-3 wget fuse libfuse2 \
             libmysqlclient-dev libqt63drender6 libqt6webview6 libqt63dquickscene2d6 \
             libgl1 libegl1 libopengl0 libglx0 libx11-xcb1 libxcb-glx0 libgbm1 libdrm2 libxcb-dri3-0 libxshmfence1 \
-            libpcsclite1 libpulse0 libxcb-cursor0
-          sudo modprobe fuse || echo "FUSE module not available, continuing without it"
+            libpcsclite1 libpulse0 libxcb-cursor0 wget
 
       - name: Determine Python version
         id: python-version
@@ -37,39 +35,66 @@ jobs:
           PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
           echo "PYTHON_VERSION=$PYTHON_VERSION" >> $GITHUB_ENV
 
-      - name: Run build script with total AppRun purge
+      - name: Build portable qutebrowser
         run: |
-          chmod +x qutebrowser-appimage.sh
-          sed -i "s|python3.13|python${{ env.PYTHON_VERSION }}|g" qutebrowser-appimage.sh
-          # Bundle glibc
-          sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/libc.so.6 "$APPDIR/usr/lib/" || { echo "Failed to copy libc.so.6"; exit 1; }' qutebrowser-appimage.sh
-          sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$APPDIR/usr/lib/" || { echo "Failed to copy ld-linux-x86-64.so.2"; exit 1; }' qutebrowser-appimage.sh
-          # Nuke all AppRun and LOGFILE references
-          sed -i '/LOGFILE=/d' qutebrowser-appimage.sh
-          sed -i '/Creating AppRun/d' qutebrowser-appimage.sh
-          sed -i '/cat << EOF > "$APPDIR\/AppRun"/,/chmod +x "$APPDIR\/AppRun"/d' qutebrowser-appimage.sh
-          sed -i '/chmod +x "$APPDIR\/AppRun"/d' qutebrowser-appimage.sh
-          # Add a tiny AppRun before desktop file creation
-          sed -i '/echo "Creating desktop file"/i \
-          echo "Creating AppRun..."; \
-          cat << "EOF" > "$APPDIR/AppRun"; \
-          #!/bin/bash \
-          HERE="$(dirname "$(readlink -f "${0}")")" \
-          exec "$HERE/usr/bin/python3" "$HERE/usr/bin/qutebrowser" \
-          EOF \
-          chmod +x "$APPDIR/AppRun"' qutebrowser-appimage.sh
-          # Ensure no stray AppRun persists
-          rm -f "$HOME/appimage-workdir/qutebrowser.AppDir/AppRun" || true
-          ./qutebrowser-appimage.sh
-          cat << "EOF" > "$HOME/appimage-workdir/qutebrowser.AppDir/AppRun"
-          #!/bin/bash
-          HERE="$(dirname "$(readlink -f "${0}")")"
-          exec "$HERE/usr/bin/python3" "$HERE/usr/bin/qutebrowser"
-          EOF
-          chmod +x "$HOME/appimage-workdir/qutebrowser.AppDir/AppRun"
+          # Set up directories
+          mkdir -p qutebrowser-portable/bin qutebrowser-portable/lib qutebrowser-portable/share
+          WORKDIR="$HOME/qutebrowser-portable-build"
+          mkdir -p "$WORKDIR"
+          
+          # Clone and build qutebrowser
+          git clone https://github.com/qutebrowser/qutebrowser.git "$WORKDIR/qutebrowser-source"
+          cd "$WORKDIR/qutebrowser-source"
+          git checkout v3.2.0
+          python3 -m venv "$WORKDIR/venv"
+          source "$WORKDIR/venv/bin/activate"
+          pip install setuptools
+          pip install -r requirements.txt -r misc/requirements/requirements-pyqt.txt
+          pip install . --prefix="$HOME/qutebrowser-portable" --no-deps
+          deactivate
 
-      - name: Upload AppImage artifact
+          # Bundle Python and qutebrowser
+          cp "$WORKDIR/venv/bin/python3" "$HOME/qutebrowser-portable/bin/"
+          cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}" "$HOME/qutebrowser-portable/lib/"
+
+          # Bundle glibc and core libs
+          cp /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
+          cp /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$HOME/qutebrowser-portable/lib/"
+          for lib in $(ldd "$HOME/qutebrowser-portable/bin/python3" | grep -o '/usr/lib/[^ ]*'); do
+            cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+          done
+          cp /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
+
+          # Create launcher script
+          cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
+          #!/bin/bash
+          DIR="$(dirname "$(readlink -f "${0}")")"
+          export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"
+          exec "$DIR/bin/python3" "$DIR/bin/qutebrowser"
+          EOF
+          chmod +x "$HOME/qutebrowser-portable/run.sh"
+
+          # Add icon and desktop file (optional, for convenience)
+          cp "$WORKDIR/qutebrowser-source/qutebrowser/icons/qutebrowser-64x64.png" "$HOME/qutebrowser-portable/qutebrowser.png"
+          cat << "EOF" > "$HOME/qutebrowser-portable/qutebrowser.desktop"
+          [Desktop Entry]
+          Name=Qutebrowser
+          Exec=./run.sh
+          Type=Application
+          Icon=qutebrowser
+          Categories=Network;WebBrowser;
+          EOF
+
+      - name: Package and upload artifact
+        run: |
+          tar -czf qutebrowser-portable.tar.gz -C "$HOME" qutebrowser-portable
+          mkdir -p artifacts
+          mv qutebrowser-portable.tar.gz artifacts/
         uses: actions/upload-artifact@v4
         with:
-          name: qutebrowser-appimage
-          path: ~/qutebrowser-3.2.0-x86_64.AppImage
+          name: qutebrowser-portable
+          path: artifacts/qutebrowser-portable.tar.gz
