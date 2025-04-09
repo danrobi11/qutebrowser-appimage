@@ -48,14 +48,14 @@ jobs:
           git checkout v3.2.0
           python3 -m venv "$WORKDIR/venv"
           source "$WORKDIR/venv/bin/activate"
-          pip install setuptools
+          pip install setuptools wheel
           pip install -r requirements.txt -r misc/requirements/requirements-pyqt.txt
           pip install . --prefix="$HOME/qutebrowser-portable" --no-deps
           deactivate
 
           # Bundle Python and qutebrowser
           cp "$WORKDIR/venv/bin/python3" "$HOME/qutebrowser-portable/bin/"
-          # Copy Python stdlib with proper structure (fixing the encodings issue)
+          # Copy Python stdlib with proper structure
           mkdir -p "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
           cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/site-packages" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
           cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}"/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
@@ -65,30 +65,46 @@ jobs:
           elif [ -d "$WORKDIR/venv/lib/lib-dynload" ]; then
             cp -r "$WORKDIR/venv/lib/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
           else
-            echo "Warning: lib-dynload not found in expected locations, Python may not work correctly."
+            echo "Error: lib-dynload not found in expected locations" && exit 1
           fi
 
-          # Bundle glibc and core libs
+          # Bundle glibc and core libs with stricter dependency matching
+          PYTHON_BIN="$HOME/qutebrowser-portable/bin/python3"
           cp /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
           cp /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$HOME/qutebrowser-portable/lib/"
-          for lib in $(ldd "$HOME/qutebrowser-portable/bin/python3" | grep -o '/usr/lib/[^ ]*'); do
+          for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
             cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
           done
-          cp /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || true
+          # Bundle Qt and other runtime libs explicitly tied to Python and qutebrowser
+          for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*libQt6[^ ]*' | sort -u); do
+            cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+          done
+          for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*libxcb[^ ]*' | sort -u); do
+            cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+          done
           cp /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
 
-          # Create launcher script with corrected PYTHONPATH and debug log
+          # Create launcher script with enhanced debugging
           cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "${0}")")"
           export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"
           export PYTHONPATH="$DIR/lib/python${{ env.PYTHON_VERSION }}:$DIR/lib/python${{ env.PYTHON_VERSION }}/site-packages:$DIR/lib/python${{ env.PYTHON_VERSION }}/lib-dynload"
-          exec "$DIR/bin/python3" "$DIR/bin/qutebrowser" > "$HOME/qutebrowser-portable.log" 2>&1
+          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" > "$HOME/qutebrowser-portable.log"
+          echo "PYTHONPATH=$PYTHONPATH" >> "$HOME/qutebrowser-portable.log"
+          echo "Running $DIR/bin/python3 $DIR/bin/qutebrowser" >> "$HOME/qutebrowser-portable.log"
+          "$DIR/bin/python3" -v "$DIR/bin/qutebrowser" >> "$HOME/qutebrowser-portable.log" 2>&1
+          EXIT_CODE=$?
+          echo "Exit code: $EXIT_CODE" >> "$HOME/qutebrowser-portable.log"
+          exit $EXIT_CODE
           EOF
           chmod +x "$HOME/qutebrowser-portable/run.sh"
+
+          # Test the launcher in the build environment
+          echo "Testing launcher in build environment..."
+          "$HOME/qutebrowser-portable/run.sh" || echo "Launcher test failed, check $HOME/qutebrowser-portable.log"
 
       - name: Package portable directory
         run: |
