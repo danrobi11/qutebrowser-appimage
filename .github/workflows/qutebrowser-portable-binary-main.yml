@@ -7,7 +7,7 @@ on:
   pull_request:
     branches:
       - main
-  workflow_dispatch: # Allows manual triggering
+  workflow_dispatch:
 
 jobs:
   build-flatpak:
@@ -26,16 +26,16 @@ jobs:
           flatpak --version
           flatpak-builder --version
 
-      # Add Flathub remote and install required runtimes
+      # Add Flathub remote and install required runtimes (user scope)
       - name: Set up Flatpak runtimes
         run: |
-          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-          flatpak install -y flathub org.kde.Platform//6.6 org.kde.Sdk//6.6
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub org.kde.Platform//6.6 org.kde.Sdk//6.6
 
       # Build the Flatpak
       - name: Build qutebrowser Flatpak
         run: |
-          flatpak-builder --force-clean --repo=repo build-dir org.qutebrowser.qutebrowser.yml
+          flatpak-builder --user --force-clean --repo=repo build-dir org.qutebrowser.qutebrowser.yml
 
       # Export Flatpak bundle
       - name: Export Flatpak bundle
