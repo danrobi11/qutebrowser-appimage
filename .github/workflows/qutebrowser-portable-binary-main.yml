@@ -1,277 +1,51 @@
-name: Build Portable Qutebrowser VM
+name: Build qutebrowser Flatpak
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: # Allows manual triggering
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
+  build-flatpak:
+    runs-on: ubuntu-latest
 
     steps:
-    - name: Install Tools
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y debootstrap qemu-system-x86 qemu-utils libpulse-dev x11-xserver-utils alsa-utils passwd hostname netbase isc-dhcp-client iproute2 ifupdown dnsutils curl
+      # Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Create Minimal Ubuntu Chroot
-      run: |
-        sudo debootstrap --arch=amd64 jammy chroot http://archive.ubuntu.com/ubuntu/
+      # Set up Flatpak environment
+      - name: Install Flatpak and flatpak-builder
+        run: |
+          sudo apt update
+          sudo apt install -y flatpak flatpak-builder
+          flatpak --version
+          flatpak-builder --version
 
-        sudo chroot chroot bash -c '
-        set -e
-        export DEBIAN_FRONTEND=noninteractive
+      # Add Flathub remote and install required runtimes
+      - name: Set up Flatpak runtimes
+        run: |
+          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak install -y flathub org.kde.Platform//6.6 org.kde.Sdk//6.6
 
-        echo "--- CHROOT: Updating apt lists (1st time) ---"
-        apt-get update
-        # --- NOTE TO AI/EDITOR: DO NOT ADD mcookie HERE! It is part of util-linux ---
-        echo "--- CHROOT: Installing base utils ---"
-        apt-get install -y --no-install-recommends software-properties-common passwd hostname
+      # Build the Flatpak
+      - name: Build qutebrowser Flatpak
+        run: |
+          flatpak-builder --force-clean --repo=repo build-dir org.qutebrowser.qutebrowser.yml
 
-        echo "--- CHROOT: Adding universe repository ---"
-        add-apt-repository universe -y
+      # Export Flatpak bundle
+      - name: Export Flatpak bundle
+        run: |
+          flatpak build-bundle repo qutebrowser.flatpak org.qutebrowser.qutebrowser
 
-        echo "--- CHROOT: Updating apt lists (2nd time) ---"
-        apt-get update
-
-        # --- FIXED: Split apt-get install into multiple commands ---
-        echo "--- CHROOT: Installing Qutebrowser ---"
-        apt-get install -y --no-install-recommends qutebrowser
-
-        echo "--- CHROOT: Installing Kernel and Boot utils ---"
-        apt-get install -y --no-install-recommends linux-generic initramfs-tools
-
-        echo "--- CHROOT: Installing Xorg Core/Base ---"
-        apt-get install -y --no-install-recommends xserver-xorg-core xinit xterm mesa-utils
-
-        echo "--- CHROOT: Installing Xorg Input driver ---"
-        apt-get install -y --no-install-recommends xserver-xorg-input-libinput # Only libinput
-
-        echo "--- CHROOT: Installing XCB/X11 runtime libraries ---"
-        apt-get install -y --no-install-recommends libxcb1 libxcb-glx0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 libxcb-util1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 libx11-xcb1 libfontconfig1
-
-        echo "--- CHROOT: Installing Xorg Auth/Utils/Fonts ---"
-        apt-get install -y --no-install-recommends xauth fonts-dejavu-core x11-utils
-
-        echo "--- CHROOT: Installing Networking utils ---"
-        apt-get install -y --no-install-recommends sudo netbase isc-dhcp-client iproute2 ifupdown dnsutils curl
-
-        echo "--- CHROOT: Package installation complete ---"
-
-        # Create non-root user
-        echo "--- CHROOT: Creating user quteuser ---"
-        useradd -m -s /bin/bash quteuser || echo "User quteuser might already exist"
-        passwd -d quteuser; passwd -d root
-
-        # Add modules to initramfs config
-        echo "--- CHROOT: Adding modules to initramfs ---"
-        echo "virtio_pci" >> /etc/initramfs-tools/modules; echo "virtio_gpu" >> /etc/initramfs-tools/modules
-        echo "9p" >> /etc/initramfs-tools/modules; echo "9pnet_virtio" >> /etc/initramfs-tools/modules
-        echo "e1000" >> /etc/initramfs-tools/modules
-        # No need for atkbd/psmouse if we force USB
-
-        echo "--- CHROOT: Generating initramfs ---"
-        update-initramfs -u -k all
-        echo "--- CHROOT: Initramfs generation complete ---"
-
-        echo "--- CHROOT: Verifying /boot contents ---"
-        ls -l /boot || echo "/boot not found or ls failed"
-        rm -f /etc/X11/xorg.conf
-        rm -f /etc/X11/xorg.conf.d/10-keyboard.conf # Ensure no kbd config
-
-        # Configure network
-        echo "--- CHROOT: Configuring network interface ens6 ---"
-        mkdir -p /etc/network/interfaces.d/
-        cat > /etc/network/interfaces.d/ens6 << EOF_NET
-        auto ens6
-        iface ens6 inet dhcp
-        EOF_NET
-        echo "--- CHROOT: Configuring /etc/resolv.conf ---"
-        cat > /etc/resolv.conf << EOF_DNS
-        nameserver 8.8.8.8
-        nameserver 1.1.1.1
-        nameserver 8.8.4.4
-        EOF_DNS
-
-        echo "--- CHROOT: Cleaning apt cache ---"
-        apt-get clean
-        ' # End of chroot bash -c block
-
-        sudo chroot chroot bash -c "echo 'qutebrowser-vm' > /etc/hostname"
-
-        # Startup script
-        sudo bash -c "cat > chroot/sbin/qute_init" << 'EOF'
-        #!/bin/bash
-        echo "--- Running Init Script ---"
-        hostname qutebrowser-vm || echo "hostname command failed"
-        echo "Hostname set to: $(hostname)"
-        echo "Mounting pseudo-filesystems (/proc, /sys, /dev/pts)..."
-        mount -t proc proc /proc || echo "Mount /proc failed"
-        mount -t sysfs sysfs /sys || echo "Mount /sys failed"
-        mkdir -p /dev/pts
-        mount -t devpts devpts /dev/pts || echo "Mount /dev/pts failed"
-        echo "Mounting /dev/shm..."
-        mkdir -p /dev/shm
-        mount -t tmpfs -o mode=1777,nosuid,nodev tmpfs /dev/shm || echo "Mount /dev/shm failed!"
-        ls -ld /dev/shm
-        mkdir -p /mnt/host
-        echo "Mounting hostshare..."
-        mount -t 9p -o trans=virtio,version=9p2000.L,access=any hostshare /mnt/host || echo "Mount failed! Error code: $?"
-
-        echo "Bringing up network interface ens6..."
-        ifup ens6 || echo "ifup ens6 failed"
-        sleep 3
-        echo "--- Network status ---"
-        ip addr show ens6 || echo "ip addr show ens6 failed"
-        echo "--- Network tests complete ---"
-
-        export DISPLAY=:0
-        export ROOT_XAUTHORITY=/root/.Xauthority
-        touch "$ROOT_XAUTHORITY" || echo "Failed to touch $ROOT_XAUTHORITY"
-        chmod 600 "$ROOT_XAUTHORITY"
-        if ! command -v xauth > /dev/null; then echo "xauth command not found!"; fi
-        if ! command -v mcookie > /dev/null; then echo "mcookie command not found! Is util-linux installed?"; fi
-        COOKIE=$(mcookie)
-        echo "Generated cookie: $COOKIE"
-        xauth -f "$ROOT_XAUTHORITY" add "$(hostname)/unix$DISPLAY" . "$COOKIE" || echo "xauth add localhost failed!"
-
-        USER_NAME=quteuser
-        USER_HOME=/home/$USER_NAME
-        USER_XAUTHORITY="$USER_HOME/.Xauthority"
-        mkdir -p "$USER_HOME"
-        cp "$ROOT_XAUTHORITY" "$USER_XAUTHORITY" || echo "Failed to copy Xauthority"
-        chown $USER_NAME:$USER_NAME "$USER_XAUTHORITY" || echo "Failed to chown Xauthority"
-        chown $USER_NAME:$USER_NAME "$USER_HOME"
-        echo "User Xauthority prepared at $USER_XAUTHORITY"
-
-        XDG_RUNTIME_DIR=/run/user/$(id -u $USER_NAME)
-        mkdir -p "$XDG_RUNTIME_DIR"
-        chown $USER_NAME:$USER_NAME "$XDG_RUNTIME_DIR"
-        chmod 700 "$XDG_RUNTIME_DIR"
-        export XDG_RUNTIME_DIR
-        echo "XDG_RUNTIME_DIR set to $XDG_RUNTIME_DIR"
-
-        echo "Starting Xorg..."
-        /usr/bin/Xorg $DISPLAY > /var/log/Xorg.0.log 2>&1 &
-        XORG_PID=$!
-        echo "Waiting for X socket /tmp/.X11-unix/X0..."
-        X_SOCKET_WAIT_COUNT=0
-        X_DIED=0
-        while [ ! -e /tmp/.X11-unix/X0 ]; do
-          sleep 0.5
-          X_SOCKET_WAIT_COUNT=$((X_SOCKET_WAIT_COUNT + 1))
-          if ! ps -p $XORG_PID > /dev/null; then echo "Xorg process died!"; X_DIED=1; break; fi
-          if [ $X_SOCKET_WAIT_COUNT -gt 20 ]; then echo "X socket wait timeout!"; X_DIED=1; break; fi
-        done
-
-        if [ -e /tmp/.X11-unix/X0 ]; then
-            echo "X socket found."
-            echo "Attempting to launch Qutebrowser as user $USER_NAME..."
-            export QUTE_VM_BASEDIR="$USER_HOME/.qutebrowser-vm"
-            mkdir -p "$QUTE_VM_BASEDIR"
-            chown -R $USER_NAME:$USER_NAME "$QUTE_VM_BASEDIR" || echo "Warning: Could not chown qutebrowser dir in VM"
-
-            QT_PLUGIN_PATH=/usr/lib/x86_64-linux-gnu/qt5/plugins
-
-            runuser -u $USER_NAME -- \
-                env DISPLAY="$DISPLAY" XAUTHORITY="$USER_XAUTHORITY" \
-                    XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
-                    QT_QPA_PLATFORM_PLUGIN_PATH="$QT_PLUGIN_PATH" \
-                    QT_DEBUG_PLUGINS=1 \
-                /usr/bin/qutebrowser \
-                --basedir "$QUTE_VM_BASEDIR" \
-                || echo "Qutebrowser launch as user $USER_NAME failed!"
-        else
-            echo "X socket NOT found."
-            X_DIED=1
-        fi
-
-        if [ $X_DIED -eq 1 ]; then
-            echo "----- BEGIN /var/log/Xorg.0.log -----"
-            grep -iE 'input|keyboard|evdev|libinput|kbd' /var/log/Xorg.0.log || echo "No specific input lines found in log."
-            echo "--- (Full log also available if needed) ---"
-            echo "----- END /var/log/Xorg.0.log -----"
-        fi
-
-        echo "Application exited or failed. Starting fallback root shell."
-        exec /bin/bash
-        EOF
-
-        sudo chroot chroot chmod +x /sbin/qute_init
-        sudo rm -f chroot/root/.bash_profile
-
-    - name: Package VM Components
-      run: |
-        echo "Listing host view of chroot/boot before copy:"
-        sudo ls -l chroot/boot || echo "Could not list chroot/boot from host"
-        if ! sudo ls chroot/boot/vmlinuz-* > /dev/null 2>&1; then echo "ERROR: Kernel (vmlinuz-*) not found in chroot/boot"; exit 1; fi
-        if ! sudo ls chroot/boot/initrd.img-* > /dev/null 2>&1; then echo "ERROR: Initrd (initrd.img-*) not found in chroot/boot"; exit 1; fi
-        sudo cp chroot/boot/vmlinuz-* kernel
-        sudo cp chroot/boot/initrd.img-* initrd
-        echo "Chroot size:"
-        sudo du -sh chroot
-        sudo dd if=/dev/zero of=filesystem.img bs=1M count=4096
-        sudo mkfs.ext4 -F filesystem.img
-        sudo mkdir -p /mnt/chroot
-        sudo mount -o loop filesystem.img /mnt/chroot
-        echo "Copying chroot contents to filesystem image..."
-        sudo cp -a chroot/* /mnt/chroot/
-        echo "Syncing..."
-        sync
-        sudo umount /mnt/chroot
-        echo "VM components (kernel, initrd, filesystem.img) created."
-        ls -lh kernel initrd filesystem.img
-
-    - name: Create Simple Run Script
-      run: |
-        cat > run-qutebrowser-vm.sh << 'EOF'
-        #!/bin/bash
-        set -e
-        QEMU_BIN="qemu-system-x86_64"
-        command -v "$QEMU_BIN" >/dev/null 2>&1 || { echo "Error: $QEMU_BIN not found."; exit 1; }
-        SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"; KERNEL="$SCRIPT_DIR/kernel"; INITRD="$SCRIPT_DIR/initrd"; FS="$SCRIPT_DIR/filesystem.img"
-        [ -f "$KERNEL" ] && [ -f "$INITRD" ] && [ -f "$FS" ] || { echo "Error: Missing VM components in $SCRIPT_DIR."; exit 1; }
-        HOST_SHARE="$HOME"; GUEST_MOUNT="/mnt/host"
-        echo "Sharing $HOST_SHARE at $GUEST_MOUNT"; echo "Use: file://$GUEST_MOUNT/..."
-        echo "Qutebrowser data/config will be stored INSIDE the VM filesystem image (ephemeral)."
-        echo "Connecting to SPICE display on port 5900..."; echo "Run: 'spicy -h 127.0.0.1 -p 5900'"
-        echo "VM console output will appear below:"
-        # Reverted to USB keyboard
-        QEMU_ARGS=(
-          -kernel "$KERNEL"
-          -initrd "$INITRD"
-          -drive "file=$FS,format=raw,if=virtio"
-          -append "root=/dev/vda console=ttyS0 rw init=/sbin/qute_init"
-          -m 1G
-          -cpu host
-          -enable-kvm
-          -virtfs "local,path=$HOST_SHARE,mount_tag=hostshare,security_model=passthrough,id=hostshare"
-          -vga virtio
-          -spice "port=5900,addr=127.0.0.1,disable-ticketing=on"
-          -serial stdio
-          -device ac97
-          -device usb-ehci,id=ehci
-          -device usb-tablet,bus=ehci.0
-          -device usb-kbd,bus=ehci.0   # USB Keyboard back
-          -netdev user,id=net0
-          -device e1000,netdev=net0
-        )
-        echo "Starting Qutebrowser VM..."; "$QEMU_BIN" "${QEMU_ARGS[@]}"; echo "QEMU exited."
-        EOF
-        chmod +x run-qutebrowser-vm.sh
-
-    - name: Bundle Package
-      run: |
-        echo "Packaging kernel, initrd, filesystem, and run script..."
-        sudo tar -czf qutebrowser-vm.tar.gz kernel initrd filesystem.img run-qutebrowser-vm.sh
-        rm -f kernel initrd filesystem.img run-qutebrowser-vm.sh
-        echo "--- Final Package Contents ---"; tar -tvf qutebrowser-vm.tar.gz; echo "------------------------"
-        ls -lh qutebrowser-vm.tar.gz
-        tar -ztvf qutebrowser-vm.tar.gz | awk '{sum+=$3} END {printf "Estimated Uncompressed Size: %.2f MB\n", sum/1024/1024}'
-
-    - name: Upload Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: qutebrowser-vm
-        path: qutebrowser-vm.tar.gz
+      # Upload the Flatpak artifact
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qutebrowser-3.2.0-flatpak
+          path: qutebrowser.flatpak
+          retention-days: 7
