@@ -37,27 +37,36 @@ jobs:
           PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
           echo "PYTHON_VERSION=$PYTHON_VERSION" >> $GITHUB_ENV
 
-      - name: Run build script with minimal AppRun
+      - name: Run build script with total AppRun purge
         run: |
           chmod +x qutebrowser-appimage.sh
           sed -i "s|python3.13|python${{ env.PYTHON_VERSION }}|g" qutebrowser-appimage.sh
-          # Bundle glibc for portability
+          # Bundle glibc
           sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/libc.so.6 "$APPDIR/usr/lib/" || { echo "Failed to copy libc.so.6"; exit 1; }' qutebrowser-appimage.sh
           sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$APPDIR/usr/lib/" || { echo "Failed to copy ld-linux-x86-64.so.2"; exit 1; }' qutebrowser-appimage.sh
-          # Remove original AppRun and LOGFILE, add minimal AppRun
-          sed -i '/LOGFILE="$HOME\/qutebrowser-appimage-run.log"/d' qutebrowser-appimage.sh
-          sed -i '/echo "Creating AppRun with debug logging"/,/chmod +x "$APPDIR\/AppRun"/c \
+          # Nuke all AppRun and LOGFILE references
+          sed -i '/LOGFILE=/d' qutebrowser-appimage.sh
+          sed -i '/Creating AppRun/d' qutebrowser-appimage.sh
+          sed -i '/cat << EOF > "$APPDIR\/AppRun"/,/chmod +x "$APPDIR\/AppRun"/d' qutebrowser-appimage.sh
+          sed -i '/chmod +x "$APPDIR\/AppRun"/d' qutebrowser-appimage.sh
+          # Add a tiny AppRun before desktop file creation
+          sed -i '/echo "Creating desktop file"/i \
           echo "Creating AppRun..."; \
           cat << "EOF" > "$APPDIR/AppRun"; \
           #!/bin/bash \
           HERE="$(dirname "$(readlink -f "${0}")")" \
-          export PYTHONPATH="$HERE/usr/lib/python${{ env.PYTHON_VERSION }}/site-packages:$PYTHONPATH" \
-          export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/plugins:$LD_LIBRARY_PATH" \
-          export QT_PLUGIN_PATH="$HERE/usr/plugins" \
           exec "$HERE/usr/bin/python3" "$HERE/usr/bin/qutebrowser" \
           EOF \
           chmod +x "$APPDIR/AppRun"' qutebrowser-appimage.sh
+          # Ensure no stray AppRun persists
+          rm -f "$HOME/appimage-workdir/qutebrowser.AppDir/AppRun" || true
           ./qutebrowser-appimage.sh
+          cat << "EOF" > "$HOME/appimage-workdir/qutebrowser.AppDir/AppRun"
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "$HERE/usr/bin/python3" "$HERE/usr/bin/qutebrowser"
+          EOF
+          chmod +x "$HOME/appimage-workdir/qutebrowser.AppDir/AppRun"
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
