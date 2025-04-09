@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install system dependencies including FUSE
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -25,9 +25,11 @@ jobs:
             libfontconfig1-dev libfreetype-dev libasound2-dev libnss3-dev libglib2.0-dev \
             libpcre2-dev libjpeg-dev libpng-dev libicu-dev libxslt1-dev \
             python3-pyqt6 python3-pyqt6.qtsvg python3-pyqt6.qtwebengine \
-            libfuse3-dev libfuse3-3 wget \
+            libfuse3-dev libfuse3-3 wget fuse libfuse2 \
             libmysqlclient-dev libqt63drender6 libqt6webview6 libqt63dquickscene2d6 \
             libgl1 libegl1 libopengl0 libglx0 libx11-xcb1 libxcb-glx0 libgbm1 libdrm2 libxcb-dri3-0 libxshmfence1
+          # Ensure FUSE is loaded
+          sudo modprobe fuse || echo "FUSE module not available, continuing without it"
 
       - name: Determine Python version
         id: python-version
