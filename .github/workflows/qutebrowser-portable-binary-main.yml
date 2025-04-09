@@ -56,7 +56,7 @@ jobs:
           git checkout v3.2.0
           python3 -m venv "$WORKDIR/venv"
           source "$WORKDIR/venv/bin/activate"
-          pip install setuptools wheel
+          pip install setuptools reveal
           pip install -r requirements.txt -r misc/requirements/requirements-pyqt.txt
           pip install . --prefix="$HOME/qutebrowser-portable" --no-deps
           deactivate
@@ -75,38 +75,43 @@ jobs:
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
             cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
           done
-          # Bundle all Qt6 and related libs explicitly
-          cp /usr/lib/x86_64-linux-gnu/libQt6Core.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6Gui.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6Widgets.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6WebEngineCore.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6WebEngineWidgets.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6Network.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6DBus.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6Svg.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6OpenGL.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6Qml.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libQt6Quick.so.6 "$HOME/qutebrowser-portable/lib/" || true
+
+          # Bundle Qt6 and PyQt6 dependencies comprehensively
+          PYQT6_MOD="$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6/QtCore.abi3.so"
+          if [ -f "$PYQT6_MOD" ]; then
+            for lib in $(ldd "$PYQT6_MOD" | grep -o '/usr/lib/[^ ]*' | sort -u); do
+              cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+            done
+          else
+            echo "Error: PyQt6 QtCore module not found at $PYQT6_MOD"
+            exit 1
+          fi
+          # Additional Qt6 and related libs
+          cp /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libicu* "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libfreetype.so.6 "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libX11.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libxkbcommon* "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
 
-          # Create launcher script with debug flags
+          # Create launcher script with library debugging
           cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "${0}")")"
           export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"
           export PYTHONPATH="$DIR/lib/python${{ env.PYTHON_VERSION }}:$DIR/lib/python${{ env.PYTHON_VERSION }}/site-packages:$DIR/lib/python${{ env.PYTHON_VERSION }}/lib-dynload"
+          export LD_DEBUG=libs
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" > "$HOME/qutebrowser-portable.log"
           echo "PYTHONPATH=$PYTHONPATH" >> "$HOME/qutebrowser-portable.log"
           echo "Running $DIR/bin/python3 $DIR/bin/qutebrowser" >> "$HOME/qutebrowser-portable.log"
           "$DIR/bin/python3" -v "$DIR/bin/qutebrowser" --debug --no-err-windows >> "$HOME/qutebrowser-portable.log" 2>&1
           EXIT_CODE=$?
           echo "Exit code: $EXIT_CODE" >> "$HOME/qutebrowser-portable.log"
+          unset LD_DEBUG
           exit $EXIT_CODE
           EOF
           chmod +x "$HOME/qutebrowser-portable/run.sh"
