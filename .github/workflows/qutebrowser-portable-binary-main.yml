@@ -27,7 +27,7 @@ jobs:
           set -x
           echo "Downloading Qt 6.7.0..."
           curl -L --retry 3 --retry-delay 5 --verbose \
-            "https://download.qt.io/official_releases/qt/6.7/6.7.0/qt-everywhere-src-6.7.0.tar.xz" \
+            "https://download.qt.io/official_releases/qt/6.7/6.7.0/single/qt-everywhere-src-6.7.0.tar.xz" \
             -o qt-everywhere-src-6.7.0.tar.xz
           if [ ! -f qt-everywhere-src-6.7.0.tar.xz ]; then
             echo "Error: Qt 6.7.0 tarball download failed"
