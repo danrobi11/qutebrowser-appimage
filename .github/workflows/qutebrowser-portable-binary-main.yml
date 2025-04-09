@@ -59,7 +59,14 @@ jobs:
           mkdir -p "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
           cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/site-packages" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
           cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}"/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-          cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
+          # Handle lib-dynload location dynamically
+          if [ -d "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" ]; then
+            cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
+          elif [ -d "$WORKDIR/venv/lib/lib-dynload" ]; then
+            cp -r "$WORKDIR/venv/lib/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
+          else
+            echo "Warning: lib-dynload not found in expected locations, Python may not work correctly."
+          fi
 
           # Bundle glibc and core libs
           cp /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
@@ -73,7 +80,7 @@ jobs:
           cp /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
 
-          # Create launcher script with corrected PYTHONHOME and debug log
+          # Create launcher script with corrected PYTHONPATH and debug log
           cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "${0}")")"
