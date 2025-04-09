@@ -19,7 +19,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential git python3 python3-pip python3-venv wget patchelf
-          # Ensure full home directory access
           mkdir -p ~/qutebrowser-portable-build
 
       - name: Determine Python version and verify lib-dynload
@@ -38,12 +37,10 @@ jobs:
 
       - name: Build portable qutebrowser
         run: |
-          # Set up directories
           mkdir -p qutebrowser-portable/bin qutebrowser-portable/lib qutebrowser-portable/Qt/plugins qutebrowser-portable/Qt/libexec
           WORKDIR="$HOME/qutebrowser-portable-build"
           mkdir -p "$WORKDIR"
           
-          # Clone and build qutebrowser
           git clone https://github.com/qutebrowser/qutebrowser.git "$WORKDIR/qutebrowser-source"
           cd "$WORKDIR/qutebrowser-source"
           git checkout v3.2.0
@@ -54,71 +51,63 @@ jobs:
           pip install . --prefix="$HOME/qutebrowser-portable" --no-deps
           deactivate
 
-          # Bundle Python and qutebrowser
           cp "$WORKDIR/venv/bin/python3" "$HOME/qutebrowser-portable/bin/"
           mkdir -p "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
           cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/site-packages" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
           cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}"/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
           cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
 
-          # Bundle glibc, linker, and core libs
           PYTHON_BIN="$HOME/qutebrowser-portable/bin/python3"
-          cp /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
-          cp /lib64/ld-linux-x86-64.so.2 "$HOME/qutebrowser-portable/lib/"
+          cp -L /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
+          cp -L /lib64/ld-linux-x86-64.so.2 "$HOME/qutebrowser-portable/lib/"
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
-            cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+            cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
           done
-          cp /usr/lib/x86_64-linux-gnu/libm.so.6 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libm.so.6"
-          cp /usr/lib/x86_64-linux-gnu/libz.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libz.so.1"
-          cp /usr/lib/x86_64-linux-gnu/libexpat.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libexpat.so.1"
-          cp /lib/x86_64-linux-gnu/libbz2.so.1.0 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libbz2.so.1.0"
-          cp /usr/lib/x86_64-linux-gnu/liblzma.so.5 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy liblzma.so.5"
+          cp -L /usr/lib/x86_64-linux-gnu/libm.so.6 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libm.so.6"
+          cp -L /usr/lib/x86_64-linux-gnu/libz.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libz.so.1"
+          cp -L /usr/lib/x86_64-linux-gnu/libexpat.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libexpat.so.1"
+          cp -L /lib/x86_64-linux-gnu/libbz2.so.1.0 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libbz2.so.1.0"
+          cp -L /usr/lib/x86_64-linux-gnu/liblzma.so.5 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy liblzma.so.5"
 
-          # Bundle Qt6 and PyQt6 dependencies comprehensively
           PYQT6_MOD="$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6/QtCore.abi3.so"
           if [ -f "$PYQT6_MOD" ]; then
             for lib in $(ldd "$PYQT6_MOD" | grep -o '/usr/lib/[^ ]*' | sort -u); do
-              cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+              cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
             done
-            # Bundle transitive Qt6 dependencies
             QT6_CORE="/usr/lib/x86_64-linux-gnu/libQt6Core.so.6"
             for lib in $(ldd "$QT6_CORE" | grep -o '/usr/lib/[^ ]*' | sort -u); do
-              cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
+              cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
             done
           else
             echo "Error: PyQt6 QtCore module not found at $PYQT6_MOD"
             exit 1
           fi
-          # Bundle all Qt6 library variants (including versioned files)
-          cp -r /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libicu* "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libfreetype.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libX11.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libxkbcommon* "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libstdc++.so.6 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libicui18n.so.* "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libicuuc.so.* "$HOME/qutebrowser-portable/lib/" || true
-          cp /usr/lib/x86_64-linux-gnu/libb2.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libb2.so.1"
-          # Bundle Qt6 plugins and resources
+          cp -L /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libicu* "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libfreetype.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libX11.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libxkbcommon* "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3 "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libstdc++.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libicui18n.so.* "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libicuuc.so.* "$HOME/qutebrowser-portable/lib/" || true
+          cp -L /usr/lib/x86_64-linux-gnu/libb2.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libb2.so.1"
           cp -r /usr/lib/x86_64-linux-gnu/qt6/plugins/* "$HOME/qutebrowser-portable/Qt/plugins/" || true
           cp -r /usr/lib/x86_64-linux-gnu/qt6/libexec/* "$HOME/qutebrowser-portable/Qt/libexec/" || true
 
-          # Debug: Verify bundled libraries
-          echo "Listing bundled libraries in $HOME/qutebrowser-portable/lib:"
-          ls -l "$HOME/qutebrowser-portable/lib/" | grep libQt6Core || echo "libQt6Core not found in bundle"
+          # Debug: Verify Qt6 libraries
+          echo "Listing Qt6 libraries in $HOME/qutebrowser-portable/lib:"
+          ls -l "$HOME/qutebrowser-portable/lib/libQt6Core.so"* || echo "No libQt6Core.so files found"
 
-          # Patch RPATH correctly
           patchelf --set-rpath '$ORIGIN/../lib' "$HOME/qutebrowser-portable/bin/python3"
           find "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6" -name '*.so' -exec patchelf --set-rpath '$ORIGIN/../../../../lib' {} \;
 
-          # Create launcher script with enhanced debugging
           cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "${0}")")"
@@ -132,7 +121,6 @@ jobs:
           echo "QT_PLUGIN_PATH=$QT_PLUGIN_PATH" >> "$HOME/qutebrowser-portable.log"
           echo "QTWEBENGINEPROCESS_PATH=$QTWEBENGINEPROCESS_PATH" >> "$HOME/qutebrowser-portable.log"
           echo "Running with bundled linker: $DIR/lib/ld-linux-x86-64.so.2" >> "$HOME/qutebrowser-portable.log"
-          # Test PyQt6 functionality
           echo "Testing PyQt6 import..." >> "$HOME/qutebrowser-portable.log"
           "$DIR/lib/ld-linux-x86-64.so.2" --library-path "$LD_LIBRARY_PATH" "$DIR/bin/python3" -c "from PyQt6.QtCore import QCoreApplication; app = QCoreApplication([]); print('PyQt6 works')" >> "$HOME/qutebrowser-portable.log" 2>&1
           echo "Launching qutebrowser..." >> "$HOME/qutebrowser-portable.log"
@@ -144,7 +132,6 @@ jobs:
           EOF
           chmod +x "$HOME/qutebrowser-portable/run.sh"
 
-          # Test the launcher in the build environment
           echo "Testing launcher in build environment..."
           "$HOME/qutebrowser-portable/run.sh" || echo "Launcher test failed, check $HOME/qutebrowser-portable.log"
 
