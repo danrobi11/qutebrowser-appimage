@@ -75,6 +75,10 @@ jobs:
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
             cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
           done
+          # Explicitly bundle missing Python deps
+          cp /usr/lib/x86_64-linux-gnu/libm.so.6 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libm.so.6"
+          cp /usr/lib/x86_64-linux-gnu/libz.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libz.so.1"
+          cp /usr/lib/x86_64-linux-gnu/libexpat.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libexpat.so.1"
 
           # Bundle Qt6 and PyQt6 dependencies comprehensively
           PYQT6_MOD="$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6/QtCore.abi3.so"
@@ -101,7 +105,7 @@ jobs:
           cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "${0}")")"
-          export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"
+          export LD_LIBRARY_PATH="$DIR/lib"
           export PYTHONPATH="$DIR/lib/python${{ env.PYTHON_VERSION }}:$DIR/lib/python${{ env.PYTHON_VERSION }}/site-packages:$DIR/lib/python${{ env.PYTHON_VERSION }}/lib-dynload"
           export LD_DEBUG=libs
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" > "$HOME/qutebrowser-portable.log"
