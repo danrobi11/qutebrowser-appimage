@@ -37,21 +37,27 @@ jobs:
           PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
           echo "PYTHON_VERSION=$PYTHON_VERSION" >> $GITHUB_ENV
 
-      - name: Run build script and obliterate AppRun
+      - name: Run build script with minimal AppRun
         run: |
           chmod +x qutebrowser-appimage.sh
           sed -i "s|python3.13|python${{ env.PYTHON_VERSION }}|g" qutebrowser-appimage.sh
           # Bundle glibc for portability
           sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/libc.so.6 "$APPDIR/usr/lib/" || { echo "Failed to copy libc.so.6"; exit 1; }' qutebrowser-appimage.sh
           sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$APPDIR/usr/lib/" || { echo "Failed to copy ld-linux-x86-64.so.2"; exit 1; }' qutebrowser-appimage.sh
-          # Remove all AppRun-related lines
+          # Remove original AppRun and LOGFILE, add minimal AppRun
           sed -i '/LOGFILE="$HOME\/qutebrowser-appimage-run.log"/d' qutebrowser-appimage.sh
-          sed -i '/echo "Creating AppRun with debug logging"/,/chmod +x "$APPDIR\/AppRun"/d' qutebrowser-appimage.sh
-          # Fix desktop file Exec line
-          sed -i 's|Exec=qutebrowser|Exec=/usr/bin/python3 /usr/bin/qutebrowser|' qutebrowser-appimage.sh
-          # Run script and ensure no AppRun exists before packaging
+          sed -i '/echo "Creating AppRun with debug logging"/,/chmod +x "$APPDIR\/AppRun"/c \
+          echo "Creating AppRun..."; \
+          cat << "EOF" > "$APPDIR/AppRun"; \
+          #!/bin/bash \
+          HERE="$(dirname "$(readlink -f "${0}")")" \
+          export PYTHONPATH="$HERE/usr/lib/python${{ env.PYTHON_VERSION }}/site-packages:$PYTHONPATH" \
+          export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/plugins:$LD_LIBRARY_PATH" \
+          export QT_PLUGIN_PATH="$HERE/usr/plugins" \
+          exec "$HERE/usr/bin/python3" "$HERE/usr/bin/qutebrowser" \
+          EOF \
+          chmod +x "$APPDIR/AppRun"' qutebrowser-appimage.sh
           ./qutebrowser-appimage.sh
-          rm -f "$HOME/appimage-workdir/qutebrowser.AppDir/AppRun"
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
