@@ -47,9 +47,8 @@ jobs:
           sed -i '/Bundling additional non-Qt libraries/a cp /usr/lib/x86_64-linux-gnu/libxcb-cursor.so.0 "$APPDIR/usr/lib/" || { echo "Failed to copy libxcb-cursor.so.0"; exit 1; }' qutebrowser-appimage.sh
           sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/libc.so.6 "$APPDIR/usr/lib/" || { echo "Failed to copy libc.so.6"; exit 1; }' qutebrowser-appimage.sh
           sed -i '/Bundling additional non-Qt libraries/a cp /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$APPDIR/usr/lib/" || { echo "Failed to copy ld-linux-x86-64.so.2"; exit 1; }' qutebrowser-appimage.sh
-          # Fix AppRun to use $HOME dynamically at runtime, targeting the exact exec line
-          sed -i '/exec "\$HERE\/usr\/bin\/python3" "\$HERE\/usr\/bin\/qutebrowser" --debug/c \
-          exec "\$HERE/usr/bin/python3" "\$HERE/usr/bin/qutebrowser" --debug > "\$HOME/qutebrowser-appimage-run.log" 2>&1' qutebrowser-appimage.sh
+          # Fix LOGFILE definition to be dynamic at runtime in AppRun
+          sed -i 's|LOGFILE="$HOME/qutebrowser-appimage-run.log"|LOGFILE="\$HOME/qutebrowser-appimage-run.log"|' qutebrowser-appimage.sh
           ./qutebrowser-appimage.sh
 
       - name: Upload AppImage artifact
