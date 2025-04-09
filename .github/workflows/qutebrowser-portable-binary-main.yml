@@ -19,9 +19,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential git python3 python3-pip python3-venv wget patchelf \
-            libqt6core6 libqt6gui6 libqt6widgets6 libqt6webenginecore6 libqt6webenginewidgets6 qt6-base-dev \
             libpulse0 libasound2t64
           mkdir -p ~/qutebrowser-portable-build
+
+      - name: Download and extract Qt 6.7.0
+        run: |
+          wget -q https://download.qt.io/official_releases/qt/6.7/6.7.0/single/qt-everywhere-src-6.7.0.tar.xz
+          tar -xf qt-everywhere-src-6.7.0.tar.xz -C ~/qutebrowser-portable-build
+          QT_DIR="$HOME/qutebrowser-portable-build/qt-everywhere-src-6.7.0"
+          echo "QT_DIR=$QT_DIR" >> $GITHUB_ENV
 
       - name: Determine Python version and verify lib-dynload
         id: python-version
@@ -76,33 +82,25 @@ jobs:
             for lib in $(ldd "$PYQT6_MOD" | grep -o '/usr/lib/[^ ]*' | sort -u); do
               cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy $lib"; exit 1; }
             done
-            QT6_CORE="/usr/lib/x86_64-linux-gnu/libQt6Core.so.6"
-            for lib in $(ldd "$QT6_CORE" | grep -o '/usr/lib/[^ ]*' | sort -u); do
-              cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy $lib"; exit 1; }
-            done
           else
             echo "Error: PyQt6 QtCore module not found at $PYQT6_MOD"
             exit 1
           fi
-          cp -L /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy Qt6 libraries"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy xcb libraries"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libicu* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icu libraries"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libfontconfig.so.1"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libfreetype.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libfreetype.so.6"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libX11.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libX11.so.6"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libxkbcommon* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy xkbcommon libraries"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libpulse.so.0"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libasound.so.2 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libasound.so.2"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libnss3.so"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libgbm.so.1"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libdouble-conversion.so.3 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libdouble-conversion.so.3"; exit 1; }
+
+          # Bundle Qt 6.7.0 libraries from downloaded source
+          cp -L "$QT_DIR/qtbase/lib/libQt6Core.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6Core.so.6"; exit 1; }
+          cp -L "$QT_DIR/qtbase/lib/libQt6Gui.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6Gui.so.6"; exit 1; }
+          cp -L "$QT_DIR/qtbase/lib/libQt6Widgets.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6Widgets.so.6"; exit 1; }
+          cp -L "$QT_DIR/qtwebengine/lib/libQt6WebEngineCore.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6WebEngineCore.so.6"; exit 1; }
+          cp -L "$QT_DIR/qtwebengine/lib/libQt6WebEngineWidgets.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6WebEngineWidgets.so.6"; exit 1; }
+          cp -L "$QT_DIR/qtbase/lib/lib*" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy additional Qt6 libraries"; exit 1; }
+          cp -L "$QT_DIR/qtbase/lib/libicu*" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icu libraries"; exit 1; }
+          cp -L "$QT_DIR/qtbase/lib/libdouble-conversion.so.3" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libdouble-conversion.so.3"; exit 1; }
+          cp -L "$QT_DIR/qtbase/lib/libb2.so.1" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libb2.so.1"; exit 1; }
           cp -L /usr/lib/x86_64-linux-gnu/libstdc++.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libstdc++.so.6"; exit 1; }
           cp -L /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libglib-2.0.so.0"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libicui18n.so.* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icui18n libraries"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libicuuc.so.* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icuuc libraries"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libb2.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libb2.so.1"; exit 1; }
 
-          # Verify target directories exist before copying Qt6 plugins and libexec
+          # Bundle Qt plugins and libexec
           if [ ! -d "$HOME/qutebrowser-portable/Qt/plugins" ]; then
             echo "Error: Target directory $HOME/qutebrowser-portable/Qt/plugins does not exist"
             exit 1
@@ -111,11 +109,8 @@ jobs:
             echo "Error: Target directory $HOME/qutebrowser-portable/Qt/libexec does not exist"
             exit 1
           fi
-          cp -r /usr/lib/x86_64-linux-gnu/qt6/plugins/* "$HOME/qutebrowser-portable/Qt/plugins/" || { echo "Failed to copy Qt6 plugins"; exit 1; }
-          # Adjusted path for Qt6 libexec files
-          echo "Checking Qt6 libexec source directory:"
-          ls -l /usr/lib/qt6/libexec/ || echo "No /usr/lib/qt6/libexec/ directory found"
-          cp -r /usr/lib/qt6/libexec/QtWebEngineProcess "$HOME/qutebrowser-portable/Qt/libexec/" || { echo "Failed to copy Qt6 libexec"; exit 1; }
+          cp -r "$QT_DIR/qtbase/plugins/"* "$HOME/qutebrowser-portable/Qt/plugins/" || { echo "Failed to copy Qt6 plugins"; exit 1; }
+          cp -r "$QT_DIR/qtwebengine/libexec/QtWebEngineProcess" "$HOME/qutebrowser-portable/Qt/libexec/" || { echo "Failed to copy Qt6 libexec"; exit 1; }
 
           echo "Listing Qt6 libraries in $HOME/qutebrowser-portable/lib:"
           ls -l "$HOME/qutebrowser-portable/lib/libQt6Core.so"* || echo "No libQt6Core.so files found"
