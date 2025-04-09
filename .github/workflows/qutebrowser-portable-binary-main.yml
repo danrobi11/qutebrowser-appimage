@@ -78,11 +78,13 @@ jobs:
           EOF
           chmod +x "$HOME/qutebrowser-portable/run.sh"
 
-      - name: Package and upload artifact
+      - name: Package portable directory
         run: |
           tar -czf qutebrowser-portable.tar.gz -C "$HOME" qutebrowser-portable
           mkdir -p artifacts
           mv qutebrowser-portable.tar.gz artifacts/
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: qutebrowser-portable
