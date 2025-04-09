@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
@@ -12,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up environment
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -26,9 +29,16 @@ jobs:
             libmysqlclient-dev libqt63drender6 libqt6webview6 libqt63dquickscene2d6 \
             libgl1 libegl1 libopengl0 libglx0 libx11-xcb1 libxcb-glx0 libgbm1 libdrm2 libxcb-dri3-0 libxshmfence1
 
+      - name: Determine Python version
+        id: python-version
+        run: |
+          PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
+          echo "PYTHON_VERSION=$PYTHON_VERSION" >> $GITHUB_ENV
+
       - name: Run build script
         run: |
           chmod +x qutebrowser-appimage.sh
+          sed -i "s|python3.13|python${{ env.PYTHON_VERSION }}|g" qutebrowser-appimage.sh
           ./qutebrowser-appimage.sh
 
       - name: Upload AppImage artifact
