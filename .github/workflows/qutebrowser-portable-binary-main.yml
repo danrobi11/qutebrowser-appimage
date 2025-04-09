@@ -89,7 +89,8 @@ jobs:
             echo "Error: PyQt6 QtCore module not found at $PYQT6_MOD"
             exit 1
           fi
-          cp /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || true
+          # Bundle all Qt6 library variants (including versioned files)
+          cp -r /usr/lib/x86_64-linux-gnu/libQt6* "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libicu* "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 "$HOME/qutebrowser-portable/lib/" || true
@@ -104,15 +105,18 @@ jobs:
           cp /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libicui18n.so.* "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libicuuc.so.* "$HOME/qutebrowser-portable/lib/" || true
-          # Explicitly bundle libb2.so.1 and its dependencies
           cp /usr/lib/x86_64-linux-gnu/libb2.so.1 "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy libb2.so.1"
           # Bundle Qt6 plugins and resources
           cp -r /usr/lib/x86_64-linux-gnu/qt6/plugins/* "$HOME/qutebrowser-portable/Qt/plugins/" || true
           cp -r /usr/lib/x86_64-linux-gnu/qt6/libexec/* "$HOME/qutebrowser-portable/Qt/libexec/" || true
 
-          # Patch RPATH for Python and PyQt6 modules to use relative paths
+          # Debug: Verify bundled libraries
+          echo "Listing bundled libraries in $HOME/qutebrowser-portable/lib:"
+          ls -l "$HOME/qutebrowser-portable/lib/" | grep libQt6Core || echo "libQt6Core not found in bundle"
+
+          # Patch RPATH correctly
           patchelf --set-rpath '$ORIGIN/../lib' "$HOME/qutebrowser-portable/bin/python3"
-          find "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6" -name '*.so' -exec patchelf --set-rpath '$ORIGIN/../../../lib' {} \;
+          find "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6" -name '*.so' -exec patchelf --set-rpath '$ORIGIN/../../../../lib' {} \;
 
           # Create launcher script with enhanced debugging
           cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
