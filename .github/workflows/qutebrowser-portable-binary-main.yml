@@ -56,6 +56,8 @@ jobs:
           # Bundle Python and qutebrowser
           cp "$WORKDIR/venv/bin/python3" "$HOME/qutebrowser-portable/bin/"
           cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}" "$HOME/qutebrowser-portable/lib/"
+          # Ensure full stdlib is copied
+          cp -r /usr/lib/python${{ env.PYTHON_VERSION}}/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/" || true
 
           # Bundle glibc and core libs
           cp /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
@@ -69,12 +71,12 @@ jobs:
           cp /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
 
-          # Create launcher script with PYTHONPATH and debug log
+          # Create launcher script with PYTHONHOME and debug log
           cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "${0}")")"
           export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"
-          export PYTHONPATH="$DIR/lib/python${{ env.PYTHON_VERSION }}/site-packages:$PYTHONPATH"
+          export PYTHONHOME="$DIR/lib/python${{ env.PYTHON_VERSION }}"
           exec "$DIR/bin/python3" "$DIR/bin/qutebrowser" > "$HOME/qutebrowser-portable.log" 2>&1
           EOF
           chmod +x "$HOME/qutebrowser-portable/run.sh"
