@@ -55,8 +55,11 @@ jobs:
 
           # Bundle Python and qutebrowser
           cp "$WORKDIR/venv/bin/python3" "$HOME/qutebrowser-portable/bin/"
-          # Copy full system stdlib directly into lib/, no nesting
-          cp -r /usr/lib/python${{ env.PYTHON_VERSION }} "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
+          # Copy Python stdlib with proper structure (fixing the encodings issue)
+          mkdir -p "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
+          cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/site-packages" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
+          cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}"/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
+          cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
 
           # Bundle glibc and core libs
           cp /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
@@ -70,12 +73,12 @@ jobs:
           cp /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
 
-          # Create launcher script with adjusted PYTHONHOME and debug log
+          # Create launcher script with corrected PYTHONHOME and debug log
           cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "${0}")")"
           export LD_LIBRARY_PATH="$DIR/lib:$LD_LIBRARY_PATH"
-          export PYTHONHOME="$DIR/lib"
+          export PYTHONPATH="$DIR/lib/python${{ env.PYTHON_VERSION }}:$DIR/lib/python${{ env.PYTHON_VERSION }}/site-packages:$DIR/lib/python${{ env.PYTHON_VERSION }}/lib-dynload"
           exec "$DIR/bin/python3" "$DIR/bin/qutebrowser" > "$HOME/qutebrowser-portable.log" 2>&1
           EOF
           chmod +x "$HOME/qutebrowser-portable/run.sh"
