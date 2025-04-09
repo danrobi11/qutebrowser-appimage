@@ -33,9 +33,6 @@ jobs:
       - name: Build qutebrowser Flatpak
         run: |
           flatpak-builder --user --force-clean --repo=repo build-dir org.qutebrowser.qutebrowser.yml --verbose
-        env:
-          PIP_RETRY_ATTEMPTS: 5
-          PIP_RETRY_DELAY: 5
 
       - name: Export Flatpak bundle
         run: |
