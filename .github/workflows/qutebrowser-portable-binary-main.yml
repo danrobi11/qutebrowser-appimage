@@ -39,7 +39,6 @@ jobs:
             echo "System lib-dynload found at $SYSTEM_LIB_DYNLOAD"
           else
             echo "Error: System lib-dynload not found at $SYSTEM_LIB_DYNLOAD"
-            echo "System Python structure:"
             find "/usr/lib/python${PYTHON_VERSION}" -type d
             exit 1
           fi
@@ -64,32 +63,39 @@ jobs:
 
           # Bundle Python and qutebrowser
           cp "$WORKDIR/venv/bin/python3" "$HOME/qutebrowser-portable/bin/"
-          # Copy Python stdlib with proper structure
           mkdir -p "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
           cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/site-packages" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
           cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}"/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-          # Copy lib-dynload from system Python
           cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-          echo "Copied lib-dynload from /usr/lib/python${{ env.PYTHON_VERSION }}/lib-dynload"
 
-          # Bundle glibc and core libs with stricter dependency matching
+          # Bundle glibc and core libs
           PYTHON_BIN="$HOME/qutebrowser-portable/bin/python3"
           cp /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
           cp /lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$HOME/qutebrowser-portable/lib/"
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
             cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
           done
-          for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*libQt6[^ ]*' | sort -u); do
-            cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
-          done
-          for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*libxcb[^ ]*' | sort -u); do
-            cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
-          done
+          # Bundle all Qt6 and related libs explicitly
+          cp /usr/lib/x86_64-linux-gnu/libQt6Core.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6Gui.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6Widgets.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6WebEngineCore.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6WebEngineWidgets.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6Network.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6DBus.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6Svg.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6OpenGL.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6Qml.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libQt6Quick.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libxcb* "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libpulse.so.0 "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libnss3.so "$HOME/qutebrowser-portable/lib/" || true
           cp /usr/lib/x86_64-linux-gnu/libgbm.so.1 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libfontconfig.so.1 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libfreetype.so.6 "$HOME/qutebrowser-portable/lib/" || true
+          cp /usr/lib/x86_64-linux-gnu/libX11.so.6 "$HOME/qutebrowser-portable/lib/" || true
 
-          # Create launcher script with enhanced debugging
+          # Create launcher script with debug flags
           cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
           #!/bin/bash
           DIR="$(dirname "$(readlink -f "${0}")")"
@@ -98,7 +104,7 @@ jobs:
           echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" > "$HOME/qutebrowser-portable.log"
           echo "PYTHONPATH=$PYTHONPATH" >> "$HOME/qutebrowser-portable.log"
           echo "Running $DIR/bin/python3 $DIR/bin/qutebrowser" >> "$HOME/qutebrowser-portable.log"
-          "$DIR/bin/python3" -v "$DIR/bin/qutebrowser" >> "$HOME/qutebrowser-portable.log" 2>&1
+          "$DIR/bin/python3" -v "$DIR/bin/qutebrowser" --debug --no-err-windows >> "$HOME/qutebrowser-portable.log" 2>&1
           EXIT_CODE=$?
           echo "Exit code: $EXIT_CODE" >> "$HOME/qutebrowser-portable.log"
           exit $EXIT_CODE
