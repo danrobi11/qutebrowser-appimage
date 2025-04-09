@@ -55,9 +55,9 @@ jobs:
 
           # Bundle Python and qutebrowser
           cp "$WORKDIR/venv/bin/python3" "$HOME/qutebrowser-portable/bin/"
-          cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}" "$HOME/qutebrowser-portable/lib/"
-          # Ensure full stdlib is copied
-          cp -r /usr/lib/python${{ env.PYTHON_VERSION}}/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/" || true
+          # Use system stdlib instead of venv's, ensuring full copy
+          rm -rf "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
+          cp -r /usr/lib/python${{ env.PYTHON_VERSION }} "$HOME/qutebrowser-portable/lib/"
 
           # Bundle glibc and core libs
           cp /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
