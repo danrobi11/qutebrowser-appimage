@@ -59,16 +59,13 @@ jobs:
           mkdir -p "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
           cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/site-packages" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
           cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}"/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-          # Dynamically locate lib-dynload
-          LIB_DYNLOAD=$(find "$WORKDIR/venv" -type d -name "lib-dynload" | head -n 1)
-          if [ -n "$LIB_DYNLOAD" ]; then
-            cp -r "$LIB_DYNLOAD" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-            echo "Found and copied lib-dynload from $LIB_DYNLOAD"
+          # Handle lib-dynload location dynamically
+          if [ -d "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" ]; then
+            cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
+          elif [ -d "$WORKDIR/venv/lib/lib-dynload" ]; then
+            cp -r "$WORKDIR/venv/lib/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
           else
-            echo "Error: lib-dynload not found in virtual environment"
-            echo "Virtual environment structure:"
-            find "$WORKDIR/venv" -type d
-            exit 1
+            echo "Error: lib-dynload not found in expected locations" && exit 1
           fi
 
           # Bundle glibc and core libs with stricter dependency matching
@@ -78,6 +75,7 @@ jobs:
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
             cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
           done
+          # Bundle Qt and other runtime libs explicitly tied to Python and qutebrowser
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*libQt6[^ ]*' | sort -u); do
             cp "$lib" "$HOME/qutebrowser-portable/lib/" || echo "Failed to copy $lib"
           done
