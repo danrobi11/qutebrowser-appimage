@@ -39,7 +39,7 @@ jobs:
 
       - name: Build portable qutebrowser
         run: |
-          mkdir -p qutebrowser-portable/bin qutebrowser-portable/lib qutebrowser-portable/Qt/plugins qutebrowser-portable/Qt/libexec
+          mkdir -p "$HOME/qutebrowser-portable/bin" "$HOME/qutebrowser-portable/lib" "$HOME/qutebrowser-portable/Qt/plugins" "$HOME/qutebrowser-portable/Qt/libexec"
           WORKDIR="$HOME/qutebrowser-portable-build"
           mkdir -p "$WORKDIR"
           
@@ -60,8 +60,8 @@ jobs:
           cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
 
           PYTHON_BIN="$HOME/qutebrowser-portable/bin/python3"
-          cp -L /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/"
-          cp -L /lib64/ld-linux-x86-64.so.2 "$HOME/qutebrowser-portable/lib/"
+          cp -L /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libc.so.6"; exit 1; }
+          cp -L /lib64/ld-linux-x86-64.so.2 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy ld-linux-x86-64.so.2"; exit 1; }
           for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
             cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy $lib"; exit 1; }
           done
@@ -101,6 +101,16 @@ jobs:
           cp -L /usr/lib/x86_64-linux-gnu/libicui18n.so.* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icui18n libraries"; exit 1; }
           cp -L /usr/lib/x86_64-linux-gnu/libicuuc.so.* "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icuuc libraries"; exit 1; }
           cp -L /usr/lib/x86_64-linux-gnu/libb2.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libb2.so.1"; exit 1; }
+
+          # Verify target directories exist before copying Qt6 plugins and libexec
+          if [ ! -d "$HOME/qutebrowser-portable/Qt/plugins" ]; then
+            echo "Error: Target directory $HOME/qutebrowser-portable/Qt/plugins does not exist"
+            exit 1
+          fi
+          if [ ! -d "$HOME/qutebrowser-portable/Qt/libexec" ]; then
+            echo "Error: Target directory $HOME/qutebrowser-portable/Qt/libexec does not exist"
+            exit 1
+          fi
           cp -r /usr/lib/x86_64-linux-gnu/qt6/plugins/* "$HOME/qutebrowser-portable/Qt/plugins/" || { echo "Failed to copy Qt6 plugins"; exit 1; }
           cp -r /usr/lib/x86_64-linux-gnu/qt6/libexec/* "$HOME/qutebrowser-portable/Qt/libexec/" || { echo "Failed to copy Qt6 libexec"; exit 1; }
 
