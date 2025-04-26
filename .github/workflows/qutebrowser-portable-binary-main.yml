@@ -1,178 +1,125 @@
 name: Build qutebrowser Portable Binary
 
 on:
+  pull_request:
+    paths:
+      - 'srcpkgs/**'
   push:
     branches:
-      - main
-  pull_request:
-    branches:
-      - main
+      - 'ci-**'
+    paths:
+      - 'srcpkgs/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build:
+  # Lint changed templates.
+  xlint:
+    name: Lint templates
     runs-on: ubuntu-latest
+
+    container:
+      image: 'ghcr.io/void-linux/void-musl-full:20250227R1'
+      env:
+        LICENSE_LIST: common/travis/license.lst
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up build environment
+      - name: Prepare container
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential git python3 python3-pip python3-venv wget patchelf curl \
-            libpulse0 libasound2t64
-          mkdir -p ~/qutebrowser-portable-build
+          # switch to repo-ci mirror
+          mkdir -p /etc/xbps.d && cp /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/
+          sed -i 's|repo-default|repo-ci|g' /etc/xbps.d/*-repository-*.conf
+          # install dependencies
+          xbps-install -Syu xbps && xbps-install -yu && xbps-install -y sudo bash grep curl git
+          # create non-root user
+          useradd -G xbuilder -M builder
+      - name: Clone and checkout
+        uses: classabbyamp/treeless-checkout-action@v1
 
-      - name: Download Qt 6.7.0
+      - name: Prepare masterdir
         run: |
-          set -x
-          echo "Downloading Qt 6.7.0..."
-          curl -L --retry 3 --retry-delay 5 --verbose \
-            "https://download.qt.io/official_releases/qt/6.7/6.7.0/single/qt-everywhere-src-6.7.0.tar.xz" \
-            -o qt-everywhere-src-6.7.0.tar.xz
-          if [ ! -f qt-everywhere-src-6.7.0.tar.xz ]; then
-            echo "Error: Qt 6.7.0 tarball download failed"
-            exit 1
-          fi
-          ls -lh qt-everywhere-src-6.7.0.tar.xz
+          chown -R builder:builder . &&
+          sudo -Eu builder common/travis/set_mirror.sh &&
+          common/travis/fetch-xtools.sh
+      - name: Find changed templates
+        run: sudo -Eu builder common/travis/changed_templates.sh
 
-      - name: Extract Qt 6.7.0
+      - name: Run lints
         run: |
-          set -x
-          echo "Extracting Qt 6.7.0..."
-          tar -xf qt-everywhere-src-6.7.0.tar.xz -C ~/qutebrowser-portable-build
-          if [ ! -d ~/qutebrowser-portable-build/qt-everywhere-src-6.7.0 ]; then
-            echo "Error: Qt 6.7.0 extraction failed"
-            exit 1
-          fi
-          QT_DIR="$HOME/qutebrowser-portable-build/qt-everywhere-src-6.7.0"
-          echo "QT_DIR=$QT_DIR" >> $GITHUB_ENV
+          sudo -Eu builder common/travis/verify-update-check.sh || rv=1
+          sudo -Eu builder common/travis/xlint.sh || rv=1
+          exit "${rv:-0}"
+  # Build changed packages.
+  build:
+    name: Build packages
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.body, '[ci skip]')"
 
-      - name: Determine Python version and verify lib-dynload
-        id: python-version
+    container:
+      image: ghcr.io/void-linux/void-${{ matrix.config.libc }}-full:20250227R1
+      options: --platform ${{ matrix.config.platform }} --privileged
+      volumes:
+        - /dev:/dev
+      env:
+        ARCH: '${{ matrix.config.arch }}'
+        BOOTSTRAP: '${{ matrix.config.host }}'
+        TEST: '${{ matrix.config.test }}'
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { arch: x86_64,       host: x86_64,      libc: glibc, platform: linux/amd64, test: 1 }
+          - { arch: i686,         host: i686,        libc: glibc, platform: linux/386,   test: 1 }
+          - { arch: aarch64,      host: x86_64,      libc: glibc, platform: linux/amd64, test: 0 }
+          - { arch: armv7l,       host: x86_64,      libc: glibc, platform: linux/amd64, test: 0 }
+          - { arch: x86_64-musl,  host: x86_64-musl, libc: musl,  platform: linux/amd64, test: 1 }
+          - { arch: armv6l-musl,  host: x86_64-musl, libc: musl,  platform: linux/amd64, test: 0 }
+          - { arch: aarch64-musl, host: x86_64-musl, libc: musl,  platform: linux/amd64, test: 0 }
+
+    steps:
+      - name: Prepare container
         run: |
-          PYTHON_VERSION=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-          echo "PYTHON_VERSION=$PYTHON_VERSION" >> $GITHUB_ENV
-          SYSTEM_LIB_DYNLOAD="/usr/lib/python${PYTHON_VERSION}/lib-dynload"
-          if [ -d "$SYSTEM_LIB_DYNLOAD" ]; then
-            echo "System lib-dynload found at $SYSTEM_LIB_DYNLOAD"
-          else
-            echo "Error: System lib-dynload not found at $SYSTEM_LIB_DYNLOAD"
-            find "/usr/lib/python${PYTHON_VERSION}" -type d
-            exit 1
-          fi
+          # switch to repo-ci mirror
+          mkdir -p /etc/xbps.d && cp /usr/share/xbps.d/*-repository-*.conf /etc/xbps.d/
+          sed -i 's|repo-default|repo-ci|g' /etc/xbps.d/*-repository-*.conf
+          # install dependencies
+          xbps-install -Syu xbps && xbps-install -yu && xbps-install -y sudo bash curl git
+          # create non-root user
+          useradd -G xbuilder -M builder
+      - name: Clone and checkout
+        uses: classabbyamp/treeless-checkout-action@v1
 
-      - name: Build portable qutebrowser
+      - name: Prepare masterdir
         run: |
-          mkdir -p "$HOME/qutebrowser-portable/bin" "$HOME/qutebrowser-portable/lib" "$HOME/qutebrowser-portable/Qt/plugins" "$HOME/qutebrowser-portable/Qt/libexec"
-          WORKDIR="$HOME/qutebrowser-portable-build"
-          mkdir -p "$WORKDIR"
-          
-          git clone https://github.com/qutebrowser/qutebrowser.git "$WORKDIR/qutebrowser-source"
-          cd "$WORKDIR/qutebrowser-source"
-          git checkout v3.2.0
-          python3 -m venv "$WORKDIR/venv"
-          source "$WORKDIR/venv/bin/activate"
-          pip install setuptools wheel
-          pip install -r requirements.txt -r misc/requirements/requirements-pyqt.txt
-          pip install . --prefix="$HOME/qutebrowser-portable" --no-deps
-          deactivate
+          chown -R builder:builder . &&
+          sudo -Eu builder common/travis/set_mirror.sh &&
+          sudo -Eu builder common/travis/prepare.sh &&
+          common/travis/fetch-xtools.sh
+      - name: Find changed templates
+        run: sudo -Eu builder common/travis/changed_templates.sh
 
-          cp "$WORKDIR/venv/bin/python3" "$HOME/qutebrowser-portable/bin/"
-          mkdir -p "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}"
-          cp -r "$WORKDIR/venv/lib/python${{ env.PYTHON_VERSION }}/site-packages" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-          cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}"/* "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
-          cp -r "/usr/lib/python${{ env.PYTHON_VERSION }}/lib-dynload" "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/"
+      - name: Build and check packages
+        run: sudo -Eu builder common/travis/build.sh "$BOOTSTRAP" "$ARCH" "$TEST"
 
-          PYTHON_BIN="$HOME/qutebrowser-portable/bin/python3"
-          cp -L /lib/x86_64-linux-gnu/libc.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libc.so.6"; exit 1; }
-          cp -L /lib64/ld-linux-x86-64.so.2 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy ld-linux-x86-64.so.2"; exit 1; }
-          for lib in $(ldd "$PYTHON_BIN" | grep -o '/usr/lib/[^ ]*' | sort -u); do
-            cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy $lib"; exit 1; }
-          done
-          cp -L /usr/lib/x86_64-linux-gnu/libm.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libm.so.6"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libz.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libz.so.1"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libexpat.so.1 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libexpat.so.1"; exit 1; }
-          cp -L /lib/x86_64-linux-gnu/libbz2.so.1.0 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libbz2.so.1.0"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/liblzma.so.5 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy liblzma.so.5"; exit 1; }
+      - name: Show files
+        run: sudo -Eu builder common/travis/show_files.sh "$BOOTSTRAP" "$ARCH"
 
-          PYQT6_MOD="$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6/QtCore.abi3.so"
-          if [ -f "$PYQT6_MOD" ]; then
-            for lib in $(ldd "$PYQT6_MOD" | grep -o '/usr/lib/[^ ]*' | sort -u); do
-              cp -L "$lib" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy $lib"; exit 1; }
-            done
-          else
-            echo "Error: PyQt6 QtCore module not found at $PYQT6_MOD"
-            exit 1
-          fi
+      - name: Compare to previous
+        run: sudo -Eu builder common/travis/xpkgdiff.sh "$BOOTSTRAP" "$ARCH"
 
-          # Bundle Qt 6.7.0 libraries from downloaded source
-          cp -L "$QT_DIR/qtbase/lib/libQt6Core.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6Core.so.6"; exit 1; }
-          cp -L "$QT_DIR/qtbase/lib/libQt6Gui.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6Gui.so.6"; exit 1; }
-          cp -L "$QT_DIR/qtbase/lib/libQt6Widgets.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6Widgets.so.6"; exit 1; }
-          cp -L "$QT_DIR/qtwebengine/lib/libQt6WebEngineCore.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6WebEngineCore.so.6"; exit 1; }
-          cp -L "$QT_DIR/qtwebengine/lib/libQt6WebEngineWidgets.so.6" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libQt6WebEngineWidgets.so.6"; exit 1; }
-          cp -L "$QT_DIR/qtbase/lib/lib*" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy additional Qt6 libraries"; exit 1; }
-          cp -L "$QT_DIR/qtbase/lib/libicu*" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy icu libraries"; exit 1; }
-          cp -L "$QT_DIR/qtbase/lib/libdouble-conversion.so.3" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libdouble-conversion.so.3"; exit 1; }
-          cp -L "$QT_DIR/qtbase/lib/libb2.so.1" "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libb2.so.1"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libstdc++.so.6 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libstdc++.so.6"; exit 1; }
-          cp -L /usr/lib/x86_64-linux-gnu/libglib-2.0.so.0 "$HOME/qutebrowser-portable/lib/" || { echo "Failed to copy libglib-2.0.so.0"; exit 1; }
-
-          # Bundle Qt plugins and libexec
-          if [ ! -d "$HOME/qutebrowser-portable/Qt/plugins" ]; then
-            echo "Error: Target directory $HOME/qutebrowser-portable/Qt/plugins does not exist"
-            exit 1
-          fi
-          if [ ! -d "$HOME/qutebrowser-portable/Qt/libexec" ]; then
-            echo "Error: Target directory $HOME/qutebrowser-portable/Qt/libexec does not exist"
-            exit 1
-          fi
-          cp -r "$QT_DIR/qtbase/plugins/"* "$HOME/qutebrowser-portable/Qt/plugins/" || { echo "Failed to copy Qt6 plugins"; exit 1; }
-          cp -r "$QT_DIR/qtwebengine/libexec/QtWebEngineProcess" "$HOME/qutebrowser-portable/Qt/libexec/" || { echo "Failed to copy Qt6 libexec"; exit 1; }
-
-          echo "Listing Qt6 libraries in $HOME/qutebrowser-portable/lib:"
-          ls -l "$HOME/qutebrowser-portable/lib/libQt6Core.so"* || echo "No libQt6Core.so files found"
-          echo "Listing audio libraries in $HOME/qutebrowser-portable/lib:"
-          ls -l "$HOME/qutebrowser-portable/lib/libpulse.so"* "$HOME/qutebrowser-portable/lib/libasound.so"* || echo "No audio libraries found"
-
-          patchelf --set-rpath '$ORIGIN/../lib' "$HOME/qutebrowser-portable/bin/python3"
-          find "$HOME/qutebrowser-portable/lib/python${{ env.PYTHON_VERSION }}/site-packages/PyQt6" -name '*.so' -exec patchelf --set-rpath '$ORIGIN/../../../../lib' {} \;
-
-          cat << "EOF" > "$HOME/qutebrowser-portable/run.sh"
-          #!/bin/bash
-          DIR="$(dirname "$(readlink -f "${0}")")"
-          export LD_LIBRARY_PATH="$DIR/lib"
-          export PYTHONPATH="$DIR/lib/python${{ env.PYTHON_VERSION }}:$DIR/lib/python${{ env.PYTHON_VERSION }}/site-packages:$DIR/lib/python${{ env.PYTHON_VERSION }}/lib-dynload"
-          export LD_DEBUG=libs
-          export QT_PLUGIN_PATH="$DIR/Qt/plugins"
-          export QTWEBENGINEPROCESS_PATH="$DIR/Qt/libexec/QtWebEngineProcess"
-          echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" > "$HOME/qutebrowser-portable.log"
-          echo "PYTHONPATH=$PYTHONPATH" >> "$HOME/qutebrowser-portable.log"
-          echo "QT_PLUGIN_PATH=$QT_PLUGIN_PATH" >> "$HOME/qutebrowser-portable.log"
-          echo "QTWEBENGINEPROCESS_PATH=$QTWEBENGINEPROCESS_PATH" >> "$HOME/qutebrowser-portable.log"
-          echo "Running with bundled linker: $DIR/lib/ld-linux-x86-64.so.2" >> "$HOME/qutebrowser-portable.log"
-          echo "Testing PyQt6 import..." >> "$HOME/qutebrowser-portable.log"
-          "$DIR/lib/ld-linux-x86-64.so.2" --library-path "$LD_LIBRARY_PATH" "$DIR/bin/python3" -c "from PyQt6.QtCore import QCoreApplication; app = QCoreApplication([]); print('PyQt6 works')" >> "$HOME/qutebrowser-portable.log" 2>&1
-          echo "Launching qutebrowser..." >> "$HOME/qutebrowser-portable.log"
-          "$DIR/lib/ld-linux-x86-64.so.2" --library-path "$LD_LIBRARY_PATH" "$DIR/bin/python3" -v "$DIR/bin/qutebrowser" --debug --no-err-windows >> "$HOME/qutebrowser-portable.log" 2>&1
-          EXIT_CODE=$?
-          echo "Exit code: $EXIT_CODE" >> "$HOME/qutebrowser-portable.log"
-          unset LD_DEBUG
-          exit $EXIT_CODE
-          EOF
-          chmod +x "$HOME/qutebrowser-portable/run.sh"
-
-          echo "Testing launcher in build environment..."
-          "$HOME/qutebrowser-portable/run.sh" || echo "Launcher test failed, check $HOME/qutebrowser-portable.log"
-
-      - name: Package portable directory
+      - name: Check file conflicts
+        if: matrix.config.arch == 'x86_64' # the arch indexed in xlocate
         run: |
-          tar -czf qutebrowser-portable.tar.gz -C "$HOME" qutebrowser-portable
-          mkdir -p artifacts
-          mv qutebrowser-portable.tar.gz artifacts/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: qutebrowser-portable
-          path: artifacts/qutebrowser-portable.tar.gz
+          if [ -s /tmp/templates ]; then
+              export XDG_CACHE_HOME="$PWD/.cache"
+              sudo -Eu builder xlocate -S &&
+              sudo -Eu builder common/scripts/lint-conflicts
+          fi
+      - name: Verify repository state
+        run: |
+          mkdir -p /check-install &&
+          chown builder:builder /check-install &&
+          sudo -Eu builder common/travis/check-install.sh "$BOOTSTRAP" "$ARCH"
