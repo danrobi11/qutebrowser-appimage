@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
 
     container:
-      image: 'ghcr.io/void-linux/void-musl-full:20250227R1'
+      image: 'ghcr.io/void-linux/void-glibc-full:20250227R1'
       env:
         LICENSE_LIST: common/travis/license.lst
 
@@ -53,7 +53,7 @@ jobs:
     if: "!contains(github.event.pull_request.title, '[ci skip]') && !contains(github.event.pull_request.body, '[ci skip]')"
 
     container:
-      image: ghcr.io/void-linux/void-${{ matrix.config.libc }}-full:20250227R1
+      image: ghcr.io/void-linux/void-glibc-full:20250227R1
       options: --platform ${{ matrix.config.platform }} --privileged
       volumes:
         - /dev:/dev
@@ -70,9 +70,6 @@ jobs:
           - { arch: i686,         host: i686,        libc: glibc, platform: linux/386,   test: 1 }
           - { arch: aarch64,      host: x86_64,      libc: glibc, platform: linux/amd64, test: 0 }
           - { arch: armv7l,       host: x86_64,      libc: glibc, platform: linux/amd64, test: 0 }
-          - { arch: x86_64-musl,  host: x86_64-musl, libc: musl,  platform: linux/amd64, test: 1 }
-          - { arch: armv6l-musl,  host: x86_64-musl, libc: musl,  platform: linux/amd64, test: 0 }
-          - { arch: aarch64-musl, host: x86_64-musl, libc: musl,  platform: linux/amd64, test: 0 }
 
     steps:
       - name: Prepare container
@@ -95,9 +92,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential git python3 python3-pip python3-venv wget patchelf curl \
-            libpulse0 libasound2t64
+          xbps-install -Syu
+          xbps-install -y base-devel git python3 python3-pip python3-virtualenv wget patchelf curl \
+            libpulseaudio alsa-lib
           mkdir -p ~/qutebrowser-portable-build
 
       - name: Download Qt 6.7.0
@@ -105,7 +102,7 @@ jobs:
           set -x
           echo "Downloading Qt 6.7.0..."
           curl -L --retry 3 --retry-delay 5 --verbose \
-            "https://download.qt.io/official_releases/qt/6.7/6.7.0/single/qt-everywhere-src-6.7.0.tar.xz" \
+            "https://download.qt.io/archive/qt/6.7/6.7.0/single/qt-everywhere-src-6.7.0.tar.xz" \
             -o qt-everywhere-src-6.7.0.tar.xz
           if [ ! -f qt-everywhere-src-6.7.0.tar.xz ] || [ $(stat -c %s qt-everywhere-src-6.7.0.tar.xz) -lt 100000 ]; then
             echo "Error: Qt 6.7.0 tarball download failed or file is too small"
