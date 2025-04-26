@@ -1,4 +1,4 @@
-name: Build qutebrowser Portable Binary
+name: Build qutebrowser
 
 on:
   pull_request:
