@@ -108,14 +108,16 @@
           cat > $out/bin/qutebrowser <<EOF
           #!/bin/sh
           export QT_LOGGING_RULES="qt5ct.debug=false;qt6ct.debug=false"
-          export QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox"
           export PYTHONPATH=$out/lib/python3.11/site-packages:${pkgs.lib.concatStringsSep ":" (map (pkg: "${pkg}/lib/python3.11/site-packages") pythonPath)}:$PYTHONPATH
           export QTWEBENGINE_RESOURCES_PATH=${pkgs.qt6.qtwebengine}/resources
           export QTWEBENGINE_DICTIONARIES_PATH=${pkgs.qt6.qtwebengine}/libexec/qtwebengine_dictionaries
           export LC_ALL=C.UTF-8
           export QT_XCB_FORCE_SOFTWARE_OPENGL=1
           export QT_QUICK_BACKEND=software
-          exec ${pkgs.python3}/bin/python3 -m qutebrowser "$@"
+          # Debug startup arguments
+          echo "qutebrowser args: \$@" > /tmp/qutebrowser-args.log
+          # Ensure no default URL overrides
+          exec ${pkgs.python3}/bin/python3 -m qutebrowser "\$@"
           EOF
           chmod +x $out/bin/qutebrowser
         '';
