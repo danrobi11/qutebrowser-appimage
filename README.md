@@ -1,4 +1,4 @@
-# Unofficail Qutebrowser Portable Build
+# Unofficial Qutebrowser Portable Build
 
 ## Overview
 This project provides a Bash script to build a portable version of [qutebrowser](https://qutebrowser.org/), a keyboard-oriented web browser based on QtWebEngine. The script creates a self-contained binary for 64-bit Ubuntu-based systems, suitable for use on other Linux distributions with minimal dependencies. It supports software rendering as a fallback for systems with disabled or unsupported GPUs, aiming for compatibility across diverse environments.
