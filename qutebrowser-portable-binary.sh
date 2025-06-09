@@ -2,7 +2,7 @@
 set -e
 
 # Script to build a portable qutebrowser executable
-# Run in Google Cloud Shell (Ubuntu 24.04) for Void Linux
+# Run in Google Cloud Shell (Ubuntu 24.04)
 
 echo "Starting build process for portable qutebrowser..."
 
@@ -320,4 +320,4 @@ ls -l qutebrowser-portable.tar.gz qutebrowser-portable.tar.gz.sha256
 echo "Portable bundle directory:"
 ls -l qutebrowser-portable
 
-echo "Script execution finished. Download qutebrowser-portable.tar.gz and extract on your Lenovo E425 to use."
+echo "Script execution finished. Download qutebrowser-portable.tar.gz and extract."
