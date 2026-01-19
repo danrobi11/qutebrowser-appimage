@@ -1,7 +1,7 @@
 name: Build qutebrowser Portable Artifact
 
 on:
-  workflow_dispatch:  # Enables manual triggering from the Actions tab
+  workflow_dispatch:  # Manual triggering from Actions tab
 
 jobs:
   build:
@@ -13,12 +13,16 @@ jobs:
       - name: Make build script executable
         run: chmod +x qutebrowser-portable-binary.sh
 
-      - name: Execute build script (with workspace override)
-        env:
-          BUILD_DIR: ${{ github.workspace }}
+      - name: Execute build script
         run: ./qutebrowser-portable-binary.sh
 
-      - name: Debug - List generated artifacts
+      - name: Copy final artifacts to workspace
+        run: |
+          cp ~/qutebrowser-portable.tar.gz .
+          cp ~/qutebrowser-portable.tar.gz.sha256 .
+          echo "Copied artifacts to workspace"
+
+      - name: Debug - List generated artifacts in workspace
         run: |
           echo "Current working directory: $(pwd)"
           echo "Files in workspace:"
