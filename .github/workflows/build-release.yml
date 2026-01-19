@@ -18,16 +18,13 @@ jobs:
 
       - name: Copy final artifacts to workspace
         run: |
-          cp ~/qutebrowser-portable.tar.gz .
-          cp ~/qutebrowser-portable.tar.gz.sha256 .
-          echo "Copied artifacts to workspace"
+          cp -v ~/qutebrowser-portable.tar.gz .
+          cp -v ~/qutebrowser-portable.tar.gz.sha256 .
+          echo "Artifacts copied to workspace for upload"
 
-      - name: Debug - List generated artifacts in workspace
+      - name: Debug - List artifacts in workspace
         run: |
           echo "Current working directory: $(pwd)"
-          echo "Files in workspace:"
-          ls -la
-          echo "Matching portable files:"
           ls -la qutebrowser-portable* || echo "No matching files found"
 
       - name: Upload artifacts
