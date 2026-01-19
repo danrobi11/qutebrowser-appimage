@@ -39,9 +39,15 @@ QT6_RESOURCE_DIR=/usr/share/qt6/resources
 [ -f "$QT6_LIB_DIR/libudev.so.1" ] || { echo "Error: libudev.so.1 not found"; exit 1; }
 [ -f "$QT6_LIB_DIR/libxcb-cursor.so.0" ] || { echo "Error: libxcb-cursor.so.0 not found"; exit 1; }
 
-# Step 3: Install Python dependencies
-echo "Installing Python dependencies..."
-python3 -m pip install --no-cache-dir --user pyinstaller qutebrowser==3.5.1 pyqt6 pyqt6-webengine jinja2 markupsafe pyyaml
+# Step 3: Install Python dependencies and qutebrowser from main branch
+echo "Installing core Python dependencies..."
+python3 -m pip install --no-cache-dir --user pyinstaller pyqt6 pyqt6-webengine jinja2 markupsafe pyyaml
+
+echo "Cloning qutebrowser from main branch and installing from source..."
+git clone https://github.com/qutebrowser/qutebrowser.git ~/qutebrowser-src
+cd ~/qutebrowser-src
+python3 -m pip install --no-cache-dir --user .
+cd ~
 
 # Step 4: Set up build directory
 echo "Setting up build directory..."
