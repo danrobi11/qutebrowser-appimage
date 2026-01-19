@@ -248,7 +248,7 @@ echo "Verifying final bundle..."
 
 # Step 11: Package the bundle
 echo "Packaging the bundle..."
-BUNDLE_DIR="$HOME/qutebrowser-portable"
+BUNDLE_DIR="${BUILD_DIR:-$HOME/qutebrowser-portable}"
 mkdir -p "$BUNDLE_DIR"
 rm -rf "$BUNDLE_DIR/qutebrowser"
 mv dist/qutebrowser "$BUNDLE_DIR/qutebrowser"
