@@ -51,7 +51,8 @@ cd ~
 
 # Step 4: Set up build directory
 echo "Setting up build directory..."
-BUNDLE_DIR="$HOME/qutebrowser-portable"
+BUILD_DIR="${BUILD_DIR:-$HOME/qutebrowser-portable-build}"
+BUNDLE_DIR="$HOME/qutebrowser-portable"   # Fixed final bundle location (always in home, writable)
 STAGING_DIR="$BUILD_DIR/staging/PyQt6/Qt6"
 DIST_DIR="$BUILD_DIR/dist/qutebrowser/PyQt6/Qt6"
 mkdir -p "$STAGING_DIR/lib" "$STAGING_DIR/libexec" "$STAGING_DIR/resources"
@@ -248,7 +249,6 @@ echo "Verifying final bundle..."
 
 # Step 11: Package the bundle
 echo "Packaging the bundle..."
-BUNDLE_DIR="${BUILD_DIR:-$HOME/qutebrowser-portable}"
 mkdir -p "$BUNDLE_DIR"
 rm -rf "$BUNDLE_DIR/qutebrowser"
 mv dist/qutebrowser "$BUNDLE_DIR/qutebrowser"
