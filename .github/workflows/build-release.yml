@@ -1,10 +1,10 @@
 name: Build qutebrowser Portable Artifact
 
 on:
-  workflow_dispatch:    # Manual triggering
+  workflow_dispatch:    # Allows manual triggering from the Actions tab
   push:
     tags:
-      - 'v*'            # Optional: tagged builds
+      - 'v*'            # Optional: triggers on tags if you push one
 
 jobs:
   build:
@@ -19,18 +19,22 @@ jobs:
       - name: Execute build script
         run: ./qutebrowser-portable-binary.sh
 
-      - name: Debug: List generated files
+      - name: Debug - List files in workspace
         run: |
-          echo "Current directory: $(pwd)"
+          echo "Current working directory:"
+          pwd
+          echo ""
+          echo "Files in current directory:"
           ls -la
+          echo ""
+          echo "Matching qutebrowser-portable files:"
           ls -la qutebrowser-portable* || echo "No matching files found"
 
-      - name: Upload portable bundle and checksum
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: qutebrowser-portable-${{ github.ref_name }}
+          name: qutebrowser-portable-${{ github.run_id }}
           path: |
-            qutebrowser-portable*
-            ./qutebrowser-portable.tar.gz
-            ./qutebrowser-portable.tar.gz.sha256
-          retention-days: 30
+            qutebrowser-portable.tar.gz
+            qutebrowser-portable.tar.gz.sha256
+          retention-days: 90
