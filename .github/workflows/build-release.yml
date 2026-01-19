@@ -1,0 +1,41 @@
+name: Build and Release qutebrowser Portable
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Make build script executable
+        run: chmod +x qutebrowser-portable-binary.sh
+
+      - name: Execute build script
+        run: ./qutebrowser-portable-binary.sh
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: qutebrowser Portable ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: qutebrowser-portable.tar.gz
+          asset_name: qutebrowser-portable-${{ github.ref_name }}.tar.gz
+          asset_content_type: application/gzip
