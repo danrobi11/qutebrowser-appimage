@@ -51,7 +51,7 @@ cd ~
 
 # Step 4: Set up build directory
 echo "Setting up build directory..."
-BUILD_DIR="$HOME/qutebrowser-portable-build"
+BUILD_DIR="${BUILD_DIR:-$HOME/qutebrowser-portable-build}"
 STAGING_DIR="$BUILD_DIR/staging/PyQt6/Qt6"
 DIST_DIR="$BUILD_DIR/dist/qutebrowser/PyQt6/Qt6"
 mkdir -p "$STAGING_DIR/lib" "$STAGING_DIR/libexec" "$STAGING_DIR/resources"
